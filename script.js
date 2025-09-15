@@ -88,6 +88,8 @@ const pipeLoc = () => Math.random() * (canvas.height - (pipeGap - pipeWidth) - p
 // --- Item settings ---
 const itemWidth = 30;
 const itemHeight = 30;
+const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
+const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
 // --- Game state ---
 let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false;
@@ -269,6 +271,7 @@ function setup() {
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
   fireworks = []; // Clear fireworks
+
 }
 
 // --- Spawn functions ---
@@ -941,7 +944,7 @@ function render() {
     ctx.fillStyle = "black";
     ctx.fillText(`Best score : ${bestScore}`, canvas.width / 2, canvas.height / 2 - 60);
     ctx.fillText(`Best Kills : ${bestKills}`, canvas.width / 2, canvas.height / 2 - 20);
-    ctx.fillText(`Best Beer : ${bestBeerScore}`, canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText(`Best Beers : ${bestBeerScore}`, canvas.width / 2, canvas.height / 2 + 20);
     ctx.fillText("Click to play", canvas.width / 2, canvas.height / 2 + 90);
   }
 
@@ -964,19 +967,35 @@ function render() {
         const newPipeY = pipeLoc();
         pipes = [...pipes.slice(1), [newPipeX, newPipeY]];
 
-        // Spawn a horizontal line of beers in the new pipe gap
-        const numberOfBeers = Math.floor(Math.random() * 4) + 1; // 1 to 4 beers
-        const beerY = newPipeY + (pipeGap / 2) - (itemHeight / 2); // Vertically centered
+        // Spawn beers horizontally, centered vertically within the pipe gap
+        const numberOfBeers = Math.floor(Math.random() * 3) + 3; // 3, 4, or 5 beers
         const startX = pipes[pipes.length - 2][0] + pipeWidth;
-        const availableSpace = (newPipeX - startX);
+        const availableHorizontalSpace = (newPipeX - startX); // This is pipeGap + pipeWidth
 
-        // Add a random horizontal offset to the whole group for a bit of challenge
-        const groupOffset = (Math.random() - 0.5) * (availableSpace / 2); // Shift by up to +/- 25% of the space
+        // Calculate the total width of the beers with fixed spacing
+        const totalBeersWidth = (numberOfBeers * itemWidth) + ((numberOfBeers - 1) * fixedHorizontalBeerSpacing);
 
-        for (let i = 1; i <= numberOfBeers; i++) {
-          // Distribute beers evenly, then apply the random group offset
-          const beerX = startX + (i * availableSpace / (numberOfBeers + 1)) - (itemWidth / 2) + groupOffset;
-          spawnBeerItem(beerX, beerY);
+        // Calculate the starting X to center the group of beers
+        const groupStartX = startX + (availableHorizontalSpace - totalBeersWidth) / 2;
+
+        for (let i = 0; i < numberOfBeers; i++) { // Loop from 0 to numberOfBeers - 1
+          const beerX = groupStartX + (i * (itemWidth + fixedHorizontalBeerSpacing));
+
+          // Calculate individual beerY with vertical variation (up, middle, or down)
+          let individualBeerY = newPipeY + (pipeGap / 2) - (itemHeight / 2);
+          const randomVerticalPosition = Math.floor(Math.random() * 3); // 0, 1, or 2
+          if (randomVerticalPosition === 0) {
+            individualBeerY -= verticalBeerOffsetAmount; // Up by 24px from center
+          } else if (randomVerticalPosition === 2) {
+            individualBeerY += verticalBeerOffsetAmount; // Down by 24px from center
+          }
+          // If randomVerticalPosition is 1, individualBeerY remains in the middle
+
+          // Ensure individual beer stays within the pipe gap boundaries (strict clamping)
+          individualBeerY = Math.max(newPipeY, individualBeerY);
+          individualBeerY = Math.min(newPipeY + pipeGap - itemHeight, individualBeerY);
+
+          spawnBeerItem(beerX, individualBeerY);
         }
 
         // Speed increase every 20 points
@@ -1002,11 +1021,7 @@ function render() {
       spawnEnemy(getEnemyType(currentScore));
       enemySpawnTimer = Math.max(effectiveEnemyMinInterval, effectiveEnemyBaseInterval - currentScore * 0.7);
     }
-    randomBeerSpawnTimer--;
-    if (randomBeerSpawnTimer <= 0) {
-      spawnBeerItem(canvas.width, Math.random() * (canvas.height - itemHeight));
-      randomBeerSpawnTimer = 120 + Math.random() * 120; // Reset for 2-4 seconds
-    }
+
   }
 
   // Update enemies

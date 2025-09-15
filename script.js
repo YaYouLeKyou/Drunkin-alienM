@@ -92,6 +92,8 @@ const pipeLoc = () => Math.random() * (canvas.height - (pipeGap - pipeWidth) - p
 // --- Item settings ---
 const itemWidth = 30;
 const itemHeight = 30;
+const shieldWidth = 40;
+const shieldHeight = 40;
 const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
 const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
@@ -103,7 +105,7 @@ let randomBeerSpawnTimer = 0;
 
 let boss2Mode = false, boss2EntryDelay = 0, postBoss2DelayActive = false, boss2Defeated = false; // New
 let boss3Mode = false, boss3EntryDelay = 0, postBoss3DelayActive = false, boss3Defeated = false; // New
-let pipes = [], flight, flyHeight, isThrusting = false, enemies = [], shots = [], items = [], particles = [];
+let pipes = [], flight, flyHeight, isThrusting = false, enemies = [], shots = [], items = [], particles = [], shieldParticles = [];
 const shotSpeed = 10;
 let boss = null;
 let bossShots = [];
@@ -122,6 +124,8 @@ let showMessage = false; // New flag to control message display
 let messageTimer = 0; // New timer for message display
 let messageColor = 'black'; // New variable for message color
 let fireworks = []; // New array for fireworks particles
+let onFireParticles = []; // New array for on fire particles
+let speedUpParticles = []; // New array for speed up particles
 let lastEnemyKillPosition = null;
 
 // --- Beer spawn ---
@@ -130,7 +134,20 @@ function spawnBeerItem(x, y) {
 }
 
 function spawnShieldItem(x, y) {
-  items.push({ x, y, type: 'shield', width: itemWidth, height: itemHeight });
+  items.push({ x, y, type: 'shield', width: shieldWidth, height: shieldHeight });
+}
+
+function spawnShieldParticles() {
+    shieldParticles = []; // Clear previous particles
+    const shieldRadius = size[0] / 2 + 10;
+    for (let i = 0; i < 20; i++) { // 20 particles
+        shieldParticles.push({
+            angle: (i / 20) * 2 * Math.PI,
+            radius: shieldRadius,
+            size: Math.random() * 3 + 2,
+            color: `hsl(${Math.random() * 60 + 180}, 100%, 70%)` // shades of blue/cyan
+        });
+    }
 }
 
 
@@ -170,6 +187,42 @@ function createFireworks(x, y, count = 30) {
       lifespan: 60,
       size: Math.random() * 4 + 2,
       color: `hsl(${Math.random() * 360}, 100%, 50%)`,
+    });
+  }
+}
+
+// --- On Fire Particles function ---
+function createOnFireParticles(x, y, count = 5) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 2 + 0.5;
+    const colorHue = Math.random() * 60; // 0-60 for red to yellow
+    onFireParticles.push({
+      x: x + Math.cos(angle) * (size[0] / 2 + 5), // Start slightly outside player
+      y: y + Math.sin(angle) * (size[1] / 2 + 5),
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      lifespan: 20 + Math.random() * 10,
+      size: Math.random() * 2 + 1,
+      color: `hsl(${colorHue}, 100%, 50%)`,
+    });
+  }
+}
+
+// --- Speed Up Particles function ---
+function createSpeedUpParticles(x, y, count = 5) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * (Math.PI / 2) - Math.PI / 4; // Angle mostly to the left, slightly up/down
+    const speed = Math.random() * 3 + 1; // Faster particles
+    const colorHue = Math.random() * 60; // 0-60 for red to yellow
+    speedUpParticles.push({
+      x: x, // Start at the alien's left edge
+      y: y + (Math.random() - 0.5) * size[1], // Spread vertically around the alien's center
+      vx: -speed * Math.cos(angle), // Move left
+      vy: speed * Math.sin(angle), // Slight vertical movement
+      lifespan: 25 + Math.random() * 15, // Longer lifespan
+      size: Math.random() * 3 + 2,
+      color: `hsl(${colorHue}, 100%, 50%)`,
     });
   }
 }
@@ -239,14 +292,19 @@ function setup() {
   beerScore = 0;
   currentKills = 0;
   flight = jump;
-  flyHeight = canvas.height / 2 - size[1] / 2 + 100;
+  flyHeight = canvas.height / 2 - size[1] / 2 + 150;
   speed = initialSpeed;
   enemySpeed = initialEnemySpeed;
-  pipes = Array(3).fill().map((_, i) => [canvas.width + i * (pipeGap + pipeWidth), pipeLoc()]);
+  pipes = Array(3).fill().map((_, i) => ({
+    x: canvas.width + i * (pipeGap + pipeWidth),
+    y: pipeLoc(),
+    hasTop: currentScore >= 5
+  }));
   enemies = [];
   shots = [];
   items = [];
   particles = [];
+  shieldParticles = [];
   boss = null;
   bossShots = [];
   boss2 = null; // New
@@ -280,6 +338,8 @@ function setup() {
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
   fireworks = []; // Clear fireworks
+  onFireParticles = []; // Clear on fire particles
+  speedUpParticles = []; // Clear speed up particles
   hasShield = false;
   lastEnemyKillPosition = null;
 
@@ -391,11 +451,62 @@ function render() {
       ctx.strokeStyle = 'rgba(173, 216, 230, 0.5)';
       ctx.lineWidth = 5;
       ctx.stroke();
+
+      // Update and draw shield particles
+      const playerCenterX = cTenth + size[0] / 2;
+      const playerCenterY = flyHeight + size[1] / 2;
+
+      for (let i = shieldParticles.length - 1; i >= 0; i--) {
+        const p = shieldParticles[i];
+        p.angle += 0.05; // rotation speed
+
+        const x = playerCenterX + Math.cos(p.angle) * p.radius;
+        const y = playerCenterY + Math.sin(p.angle) * p.radius;
+
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(x, y, p.size, 0, 2 * Math.PI);
+        ctx.fill();
+      }
     }
     if (onFire) {
-      ctx.fillStyle = "rgba(255, 165, 0, 0.3)";
+      // Continuously spawn on-fire particles around the player
+      createOnFireParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, 2); // Spawn 2 particles per frame
+
+      // Update and draw onFireParticles
+      for (let i = onFireParticles.length - 1; i >= 0; i--) {
+        const p = onFireParticles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.lifespan--;
+
+        if (p.lifespan <= 0) {
+          onFireParticles.splice(i, 1);
+          continue;
+        }
+
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (p.lifespan / 30), 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+
+    // Update and draw speedUpParticles
+    for (let i = speedUpParticles.length - 1; i >= 0; i--) {
+      const p = speedUpParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.lifespan--;
+
+      if (p.lifespan <= 0) {
+        speedUpParticles.splice(i, 1);
+        continue;
+      }
+
+      ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(cTenth + size[0] / 2, flyHeight + size[1] / 2, size[0], 0, 2 * Math.PI);
+      ctx.arc(p.x, p.y, p.size * (p.lifespan / 15), 0, 2 * Math.PI); // Adjust lifespan divisor for speedUpParticles
       ctx.fill();
     }
 
@@ -770,7 +881,7 @@ function render() {
     if (bossMode && !boss && bossEntryDelay > 0) {
       bossEntryDelay--;
       // Keep existing pipes and enemies moving until off-screen
-      pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+      pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
       enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       if (bossEntryDelay === 0) {
         spawnBoss();
@@ -781,7 +892,7 @@ function render() {
     if (boss2Mode && !boss2 && boss2EntryDelay > 0) {
       boss2EntryDelay--;
       // Keep existing pipes and enemies moving until off-screen
-      pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+      pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
       enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       if (boss2EntryDelay === 0) {
         spawnBoss2();
@@ -792,7 +903,7 @@ function render() {
     if (boss3Mode && !boss3 && boss3EntryDelay > 0) {
       boss3EntryDelay--;
       // Keep existing pipes and enemies moving until off-screen
-      pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+      pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
       enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       if (boss3EntryDelay === 0) {
         spawnBoss3();
@@ -804,12 +915,16 @@ function render() {
       if (bossEntryDelay > 0) {
         bossEntryDelay--;
         // Keep existing pipes and enemies moving until off-screen
-        pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+        pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
         enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       } else {
         postBossDelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
-        pipes = Array(3).fill().map((_, i) => [canvas.width + i * (pipeGap + pipeWidth), pipeLoc()]);
+        pipes = Array(3).fill().map((_, i) => ({
+    x: canvas.width + i * (pipeGap + pipeWidth),
+    y: pipeLoc(),
+    hasTop: currentScore >= 5
+  }));
       }
     }
 
@@ -818,12 +933,16 @@ function render() {
       if (boss2EntryDelay > 0) {
         boss2EntryDelay--;
         // Keep existing pipes and enemies moving until off-screen
-        pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+        pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
         enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       } else {
         postBoss2DelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
-        pipes = Array(3).fill().map((_, i) => [canvas.width + i * (pipeGap + pipeWidth), pipeLoc()]); // Re-initialize pipes
+        pipes = Array(3).fill().map((_, i) => ({
+    x: canvas.width + i * (pipeGap + pipeWidth),
+    y: pipeLoc(),
+    hasTop: currentScore >= 5
+  })); // Re-initialize pipes
       }
     }
 
@@ -832,12 +951,16 @@ function render() {
       if (boss3EntryDelay > 0) {
         boss3EntryDelay--;
         // Keep existing pipes and enemies moving until off-screen
-        pipes = pipes.filter(pipe => pipe[0] + pipeWidth > 0);
+        pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
         enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
       } else {
         postBoss3DelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
-        pipes = Array(3).fill().map((_, i) => [canvas.width + i * (pipeGap + pipeWidth), pipeLoc()]); // Re-initialize pipes
+        pipes = Array(3).fill().map((_, i) => ({
+    x: canvas.width + i * (pipeGap + pipeWidth),
+    y: pipeLoc(),
+    hasTop: currentScore >= 5
+  })); // Re-initialize pipes
       }
     }
 
@@ -973,13 +1096,13 @@ function render() {
       ) {
         if (item.type === 'shield') {
           hasShield = true;
+          spawnShieldParticles();
         } else { // 'beer'
           beerScore++;
           bestBeerScore = Math.max(bestBeerScore, beerScore);
           if (beerScore > 0 && beerScore % 10 === 0) {
             onFire = true;
             onFireTimer = ON_FIRE_DURATION;
-            showMessageWithDuration("ON FIRE!", "", "red", 120);
           }
         }
         items.splice(i, 1);
@@ -999,26 +1122,33 @@ function render() {
   // Pipes
   if (gamePlaying) {
     pipes.forEach((pipe, i) => {
-      pipe[0] -= displaySpeed;
-      const topPipeHeight = topPipeImg.height * (pipeWidth / topPipeImg.width);
-      ctx.drawImage(topPipeImg, pipe[0], pipe[1] - topPipeHeight, pipeWidth, topPipeHeight);
+      pipe.x -= displaySpeed;
+
+      if (pipe.hasTop) {
+        const topPipeHeight = topPipeImg.height * (pipeWidth / topPipeImg.width);
+        ctx.drawImage(topPipeImg, pipe.x, pipe.y - topPipeHeight, pipeWidth, topPipeHeight);
+      }
+      
       const bottomPipeHeight = bottomPipeImg.height * (pipeWidth / bottomPipeImg.width);
-      ctx.drawImage(bottomPipeImg, pipe[0], pipe[1] + pipeGap, pipeWidth, bottomPipeHeight);
+      ctx.drawImage(bottomPipeImg, pipe.x, pipe.y + pipeGap, pipeWidth, bottomPipeHeight);
 
       // Only add new pipes if not in boss mode and less than 5 pipes have entered (or if boss is defeated)
-      if (!bossMode && !postBossDelayActive && !boss2Mode && !postBoss3DelayActive && (bossDefeated || boss2Defeated || pipesEntered < 60) && pipe[0] <= -pipeWidth) {
+      if (!bossMode && !postBossDelayActive && !boss2Mode && !postBoss3DelayActive && (bossDefeated || boss2Defeated || pipesEntered < 60) && pipe.x <= -pipeWidth) {
         currentScore++;
         pipesEntered++;
         bestScore = Math.max(bestScore, currentScore);
 
-        const newPipeX = pipes[pipes.length - 1][0] + pipeGap + pipeWidth;
-        const newPipeY = pipeLoc();
-        pipes = [...pipes.slice(1), [newPipeX, newPipeY]];
+        const newPipe = {
+            x: pipes[pipes.length - 1].x + pipeGap + pipeWidth,
+            y: pipeLoc(),
+            hasTop: currentScore >= 5
+        };
+        pipes = [...pipes.slice(1), newPipe];
 
         // Spawn beers horizontally, centered vertically within the pipe gap
-        const numberOfBeers = Math.floor(Math.random() * 3) + 3; // 3, 4, or 5 beers
-        const startX = pipes[pipes.length - 2][0] + pipeWidth;
-        const availableHorizontalSpace = (newPipeX - startX); // This is pipeGap + pipeWidth
+        const numberOfBeers = Math.floor(Math.random() * 2) + 3; // 3 or 4 beers
+        const startX = pipes[pipes.length - 2].x + pipeWidth;
+        const availableHorizontalSpace = (newPipe.x - startX); // This is pipeGap + pipeWidth
 
         // Calculate the total width of the beers with fixed spacing
         const totalBeersWidth = (numberOfBeers * itemWidth) + ((numberOfBeers - 1) * fixedHorizontalBeerSpacing);
@@ -1030,7 +1160,7 @@ function render() {
           const beerX = groupStartX + (i * (itemWidth + fixedHorizontalBeerSpacing));
 
           // Calculate individual beerY with vertical variation (up, middle, or down)
-          let individualBeerY = newPipeY + (pipeGap / 2) - (itemHeight / 2);
+          let individualBeerY = newPipe.y + (pipeGap / 2) - (itemHeight / 2);
           const randomVerticalPosition = Math.floor(Math.random() * 3); // 0, 1, or 2
           if (randomVerticalPosition === 0) {
             individualBeerY -= verticalBeerOffsetAmount; // Up by 24px from center
@@ -1040,8 +1170,8 @@ function render() {
           // If randomVerticalPosition is 1, individualBeerY remains in the middle
 
           // Ensure individual beer stays within the pipe gap boundaries (strict clamping)
-          individualBeerY = Math.max(newPipeY, individualBeerY);
-          individualBeerY = Math.min(newPipeY + pipeGap - itemHeight, individualBeerY);
+          individualBeerY = Math.max(newPipe.y, individualBeerY);
+          individualBeerY = Math.min(newPipe.y + pipeGap - itemHeight, individualBeerY);
 
           spawnBeerItem(beerX, individualBeerY);
         }
@@ -1055,7 +1185,10 @@ function render() {
         }
       }
 
-      if ([pipe[0] <= cTenth + size[0], pipe[0] + pipeWidth >= cTenth, pipe[1] > flyHeight || pipe[1] + pipeGap < flyHeight + size[1]].every(Boolean)) {
+      const collisionWithTop = pipe.hasTop && pipe.y > flyHeight;
+      const collisionWithBottom = pipe.y + pipeGap < flyHeight + size[1];
+
+      if ([pipe.x <= cTenth + size[0], pipe.x + pipeWidth >= cTenth, collisionWithTop || collisionWithBottom].every(Boolean)) {
         if (hasShield) {
           hasShield = false;
         } else {
@@ -1130,19 +1263,18 @@ function render() {
 
   // --- HUD ---
   ctx.textAlign = "right";
-  ctx.font = "bold 20px courier";
+  ctx.font = "bold 16px courier";
   ctx.fillStyle = "black";
-  ctx.fillText(`Score : ${currentScore}`, canvas.width - 10, 50);
-  ctx.fillText(`Kills : ${currentKills}`, canvas.width - 10, 80);
-  ctx.fillText(`Beers : ${beerScore}`, canvas.width - 10, 110);
+  ctx.fillText(`Score : ${currentScore}`, canvas.width - 10, 40);
+  ctx.fillText(`Kills : ${currentKills}`, canvas.width - 10, 64);
+  ctx.fillText(`Beers : ${beerScore}`, canvas.width - 10, 88);
 
   // Speed-up message
   if (showSpeedUpAd && speedUpAdTimer > 0) {
-    ctx.textAlign = "center";
-    ctx.fillStyle = "red";
-    ctx.font = "bold 40px Arial";
-    ctx.fillText("SPEED UP!", canvas.width / 2, canvas.height / 2);
     speedUpAdTimer--;
+
+    // Add flame effect behind the player during speed up
+    createSpeedUpParticles(cTenth, flyHeight + size[1] / 2, 8); // Spawn 8 particles per frame behind the alien
   }
 
   // Display messages

@@ -19,6 +19,8 @@ const enemy2Img = new Image();
 enemy2Img.src = "./media/insectesolo2-rbg.png";
 const enemy3Img = new Image();
 enemy3Img.src = "./media/insectesolo.png";
+const shieldImg = new Image();
+shieldImg.src = "./media/shield.png";
 
 // --- Flags ---
 let playerImgLoaded = false;
@@ -29,6 +31,7 @@ let beerImgLoaded = false;
 let enemy1ImgLoaded = false;
 let enemy2ImgLoaded = false;
 let enemy3ImgLoaded = false;
+let shieldImgLoaded = false;
 
 playerImg.onload = () => { playerImgLoaded = true; startGameIfReady(); };
 backgroundImg.onload = () => { backgroundLoaded = true; startGameIfReady(); };
@@ -38,6 +41,7 @@ beerImg.onload = () => { beerImgLoaded = true; startGameIfReady(); };
 enemy1Img.onload = () => { enemy1ImgLoaded = true; startGameIfReady(); };
 enemy2Img.onload = () => { enemy2ImgLoaded = true; startGameIfReady(); };
 enemy3Img.onload = () => { enemy3ImgLoaded = true; startGameIfReady(); };
+shieldImg.onload = () => { shieldImgLoaded = true; startGameIfReady(); };
 
 
 // --- General settings ---
@@ -92,7 +96,7 @@ const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
 const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
 // --- Game state ---
-let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false;
+let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false, hasShield = false;
 let onFire = false, onFireTimer = 0;
 const ON_FIRE_DURATION = 300; // 5 seconds
 let randomBeerSpawnTimer = 0;
@@ -118,10 +122,15 @@ let showMessage = false; // New flag to control message display
 let messageTimer = 0; // New timer for message display
 let messageColor = 'black'; // New variable for message color
 let fireworks = []; // New array for fireworks particles
+let lastEnemyKillPosition = null;
 
 // --- Beer spawn ---
 function spawnBeerItem(x, y) {
-  items.push({ x, y, width: itemWidth, height: itemHeight });
+  items.push({ x, y, type: 'beer', width: itemWidth, height: itemHeight });
+}
+
+function spawnShieldItem(x, y) {
+  items.push({ x, y, type: 'shield', width: itemWidth, height: itemHeight });
 }
 
 
@@ -271,6 +280,8 @@ function setup() {
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
   fireworks = []; // Clear fireworks
+  hasShield = false;
+  lastEnemyKillPosition = null;
 
 }
 
@@ -368,6 +379,19 @@ function render() {
   // Player
   if (gamePlaying) {
     ctx.drawImage(playerImg, cTenth, flyHeight, ...size);
+    if (hasShield) {
+      ctx.beginPath();
+      ctx.arc(
+        cTenth + size[0] / 2,  // player center X
+        flyHeight + size[1] / 2,   // player center Y
+        size[0] / 2 + 10,          // radius bigger than player
+        0,
+        2 * Math.PI
+      );
+      ctx.strokeStyle = 'rgba(173, 216, 230, 0.5)';
+      ctx.lineWidth = 5;
+      ctx.stroke();
+    }
     if (onFire) {
       ctx.fillStyle = "rgba(255, 165, 0, 0.3)";
       ctx.beginPath();
@@ -379,8 +403,15 @@ function render() {
     flight += gravity;
     flyHeight = Math.min(flyHeight + flight, canvas.height - size[1]);
     if (flyHeight <= 0 || flyHeight >= canvas.height - size[1]) {
-      gamePlaying = false;
-      setup();
+      if (hasShield) {
+        hasShield = false;
+        flight = 0;
+        if (flyHeight <= 0) flyHeight = 1;
+        if (flyHeight >= canvas.height - size[1]) flyHeight = canvas.height - size[1] - 1;
+      } else {
+        gamePlaying = false;
+        setup();
+      }
     }
 
     if (isShooting) {
@@ -513,9 +544,16 @@ function render() {
 
           shots.splice(i, 1);
 
+          const enemyCenterX = enemy.x + size[0] / 2;
+          const enemyCenterY = enemy.y + size[1] / 2;
+          lastEnemyKillPosition = { x: enemyCenterX - itemWidth / 2, y: enemyCenterY - itemHeight / 2 };
+          
           enemies.splice(j, 1);
           currentKills++;
           bestKills = Math.max(bestKills, currentKills);
+          if (currentKills > 0 && currentKills % 10 === 0) {
+            spawnShieldItem(lastEnemyKillPosition.x, lastEnemyKillPosition.y);
+          }
           break;
         }
       }
@@ -570,8 +608,12 @@ function render() {
 
       // Player collision with boss
       if (cTenth < boss.x + boss.width && cTenth + size[0] > boss.x && flyHeight < boss.y + boss.height && flyHeight + size[1] > boss.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -631,8 +673,12 @@ function render() {
 
       // Player collision with boss2
       if (cTenth < boss2.x + boss2.width && cTenth + size[0] > boss2.x && flyHeight < boss2.y + boss2.height && flyHeight + size[1] > boss2.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -692,8 +738,12 @@ function render() {
 
       // Player collision with boss3
       if (cTenth < boss3.x + boss3.width && cTenth + size[0] > boss3.x && flyHeight < boss3.y + boss3.height && flyHeight + size[1] > boss3.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -811,8 +861,13 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+          bossShots.splice(i, 1);
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -836,8 +891,13 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+          boss2Shots.splice(i, 1);
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -861,33 +921,13 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        gamePlaying = false;
-        setup();
-      }
-    }
-
-    // Boss 3 shots
-    for (let i = boss3Shots.length - 1; i >= 0; i--) {
-      const shot = boss3Shots[i];
-      shot.x += shot.vx;
-      shot.y += shot.vy;
-
-      ctx.fillStyle = 'cyan'; // Different color for boss3 shots
-      ctx.beginPath();
-      ctx.arc(shot.x + shot.width / 2, shot.y + shot.height / 2, shot.width / 2, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.strokeStyle = 'darkcyan';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      if (shot.x < 0) {
-        boss3Shots.splice(i, 1);
-        continue;
-      }
-
-      if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+          boss3Shots.splice(i, 1);
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     }
 
@@ -914,7 +954,11 @@ function render() {
       const item = items[i];
       item.x -= speed;
 
-      ctx.drawImage(beerImg, item.x, item.y, item.width, item.height);
+      if (item.type === 'shield') {
+        ctx.drawImage(shieldImg, item.x, item.y, item.width, item.height);
+      } else {
+        ctx.drawImage(beerImg, item.x, item.y, item.width, item.height);
+      }
 
       if (item.x + item.width < 0) {
         items.splice(i, 1);
@@ -927,14 +971,18 @@ function render() {
         flyHeight < item.y + item.height &&
         flyHeight + size[1] > item.y
       ) {
-        items.splice(i, 1);
-        beerScore++;
-        bestBeerScore = Math.max(bestBeerScore, beerScore);
-        if (beerScore > 0 && beerScore % 10 === 0) {
-          onFire = true;
-          onFireTimer = ON_FIRE_DURATION;
-          showMessageWithDuration("ON FIRE!", "", "red", 120);
+        if (item.type === 'shield') {
+          hasShield = true;
+        } else { // 'beer'
+          beerScore++;
+          bestBeerScore = Math.max(bestBeerScore, beerScore);
+          if (beerScore > 0 && beerScore % 10 === 0) {
+            onFire = true;
+            onFireTimer = ON_FIRE_DURATION;
+            showMessageWithDuration("ON FIRE!", "", "red", 120);
+          }
         }
+        items.splice(i, 1);
       }
     }
   } else {
@@ -1008,8 +1056,12 @@ function render() {
       }
 
       if ([pipe[0] <= cTenth + size[0], pipe[0] + pipeWidth >= cTenth, pipe[1] > flyHeight || pipe[1] + pipeGap < flyHeight + size[1]].every(Boolean)) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+        } else {
+          gamePlaying = false;
+          setup();
+        }
       }
     });
   }
@@ -1064,8 +1116,13 @@ function render() {
 
       // Collision
       if (cTenth < e.x + size[0] && cTenth + size[0] > e.x && flyHeight < e.y + size[1] && flyHeight + size[1] > e.y) {
-        gamePlaying = false;
-        setup();
+        if (hasShield) {
+          hasShield = false;
+          enemies.splice(i, 1);
+        } else {
+          gamePlaying = false;
+          setup();
+        }
         break;
       }
     }
@@ -1129,7 +1186,7 @@ function render() {
 
 // --- Start game if images loaded ---
 function startGameIfReady() {
-  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && beerImgLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded) {
+  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && beerImgLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded && shieldImgLoaded) {
     setup();
     animationFrameId = requestAnimationFrame(render);
   }

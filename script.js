@@ -21,6 +21,8 @@ const enemy3Img = new Image();
 enemy3Img.src = "./media/insectesolo.png";
 const shieldImg = new Image();
 shieldImg.src = "./media/shield.png";
+const weaponImg = new Image();
+weaponImg.src = "./media/weapon.png";
 
 // --- Flags ---
 let playerImgLoaded = false;
@@ -32,6 +34,7 @@ let enemy1ImgLoaded = false;
 let enemy2ImgLoaded = false;
 let enemy3ImgLoaded = false;
 let shieldImgLoaded = false;
+let weaponImgLoaded = false;
 
 playerImg.onload = () => { playerImgLoaded = true; startGameIfReady(); };
 backgroundImg.onload = () => { backgroundLoaded = true; startGameIfReady(); };
@@ -42,6 +45,7 @@ enemy1Img.onload = () => { enemy1ImgLoaded = true; startGameIfReady(); };
 enemy2Img.onload = () => { enemy2ImgLoaded = true; startGameIfReady(); };
 enemy3Img.onload = () => { enemy3ImgLoaded = true; startGameIfReady(); };
 shieldImg.onload = () => { shieldImgLoaded = true; startGameIfReady(); };
+weaponImg.onload = () => { weaponImgLoaded = true; startGameIfReady(); };
 
 
 // --- General settings ---
@@ -107,6 +111,10 @@ let boss2Mode = false, boss2EntryDelay = 0, postBoss2DelayActive = false, boss2D
 let boss3Mode = false, boss3EntryDelay = 0, postBoss3DelayActive = false, boss3Defeated = false; // New
 let pipes = [], flight, flyHeight, isThrusting = false, enemies = [], shots = [], items = [], particles = [], shieldParticles = [];
 const shotSpeed = 10;
+let weaponLevel = 0; // 0: normal, 1: bounce, 2: double, 3: triple
+const weaponItemWidth = 30;
+const weaponItemHeight = 30;
+const weaponColors = ["#FF00FF", "#00FFFF", "#FFFF00", "#FF4500", "#ADFF2F", "#8A2BE2"]; // Flashy colors
 let boss = null;
 let bossShots = [];
 let boss1ShotCount = 0;
@@ -137,17 +145,21 @@ function spawnShieldItem(x, y) {
   items.push({ x, y, type: 'shield', width: shieldWidth, height: shieldHeight });
 }
 
+function spawnWeaponItem(x, y) {
+  items.push({ x, y, type: 'weapon', width: weaponItemWidth, height: weaponItemHeight });
+}
+
 function spawnShieldParticles() {
-    shieldParticles = []; // Clear previous particles
-    const shieldRadius = size[0] / 2 + 10;
-    for (let i = 0; i < 20; i++) { // 20 particles
-        shieldParticles.push({
-            angle: (i / 20) * 2 * Math.PI,
-            radius: shieldRadius,
-            size: Math.random() * 3 + 2,
-            color: `hsl(${Math.random() * 60 + 180}, 100%, 70%)` // shades of blue/cyan
-        });
-    }
+  shieldParticles = []; // Clear previous particles
+  const shieldRadius = size[0] / 2 + 10;
+  for (let i = 0; i < 20; i++) { // 20 particles
+    shieldParticles.push({
+      angle: (i / 20) * 2 * Math.PI,
+      radius: shieldRadius,
+      size: Math.random() * 3 + 2,
+      color: `hsl(${Math.random() * 60 + 180}, 100%, 70%)` // shades of blue/cyan
+    });
+  }
 }
 
 
@@ -342,6 +354,7 @@ function setup() {
   speedUpParticles = []; // Clear speed up particles
   hasShield = false;
   lastEnemyKillPosition = null;
+  weaponLevel = 0; // Reset weapon level
 
 }
 
@@ -540,7 +553,31 @@ function render() {
       shot.x += shot.vx;
       shot.y += shot.vy;
 
-      ctx.fillStyle = "#FF4500";
+      // Bounce logic for weaponLevel 1
+      if (shot.bounce) {
+        if (shot.y <= 0 || shot.y + shot.height >= canvas.height) {
+          shot.vy *= -1; // Reverse vertical direction
+        }
+      }
+
+      // Add current position to trail
+      shot.trail.push({ x: shot.x, y: shot.y, lifespan: 15 }); // Store position and lifespan for trail
+
+      // Update and draw trail
+      for (let j = shot.trail.length - 1; j >= 0; j--) {
+        const trailPart = shot.trail[j];
+        trailPart.lifespan--;
+        if (trailPart.lifespan <= 0) {
+          shot.trail.splice(j, 1);
+          continue;
+        }
+        ctx.fillStyle = `${shot.color}50`; // Fading color for trail
+        ctx.beginPath();
+        ctx.arc(trailPart.x + shot.width / 2, trailPart.y + shot.height / 2, shot.width / 2 * (trailPart.lifespan / 15), 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = shot.color;
       ctx.beginPath();
       ctx.arc(shot.x + shot.width / 2, shot.y + shot.height / 2, shot.width / 2, 0, 2 * Math.PI);
       ctx.fill();
@@ -658,7 +695,7 @@ function render() {
           const enemyCenterX = enemy.x + size[0] / 2;
           const enemyCenterY = enemy.y + size[1] / 2;
           lastEnemyKillPosition = { x: enemyCenterX - itemWidth / 2, y: enemyCenterY - itemHeight / 2 };
-          
+
           enemies.splice(j, 1);
           currentKills++;
           bestKills = Math.max(bestKills, currentKills);
@@ -921,10 +958,10 @@ function render() {
         postBossDelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
         pipes = Array(3).fill().map((_, i) => ({
-    x: canvas.width + i * (pipeGap + pipeWidth),
-    y: pipeLoc(),
-    hasTop: currentScore >= 5
-  }));
+          x: canvas.width + i * (pipeGap + pipeWidth),
+          y: pipeLoc(),
+          hasTop: currentScore >= 5
+        }));
       }
     }
 
@@ -939,10 +976,10 @@ function render() {
         postBoss2DelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
         pipes = Array(3).fill().map((_, i) => ({
-    x: canvas.width + i * (pipeGap + pipeWidth),
-    y: pipeLoc(),
-    hasTop: currentScore >= 5
-  })); // Re-initialize pipes
+          x: canvas.width + i * (pipeGap + pipeWidth),
+          y: pipeLoc(),
+          hasTop: currentScore >= 5
+        })); // Re-initialize pipes
       }
     }
 
@@ -957,10 +994,10 @@ function render() {
         postBoss3DelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
         pipes = Array(3).fill().map((_, i) => ({
-    x: canvas.width + i * (pipeGap + pipeWidth),
-    y: pipeLoc(),
-    hasTop: currentScore >= 5
-  })); // Re-initialize pipes
+          x: canvas.width + i * (pipeGap + pipeWidth),
+          y: pipeLoc(),
+          hasTop: currentScore >= 5
+        })); // Re-initialize pipes
       }
     }
 
@@ -1079,7 +1116,9 @@ function render() {
 
       if (item.type === 'shield') {
         ctx.drawImage(shieldImg, item.x, item.y, item.width, item.height);
-      } else {
+      } else if (item.type === 'weapon') {
+        ctx.drawImage(weaponImg, item.x, item.y, item.width, item.height);
+      } else { // 'beer'
         ctx.drawImage(beerImg, item.x, item.y, item.width, item.height);
       }
 
@@ -1097,6 +1136,15 @@ function render() {
         if (item.type === 'shield') {
           hasShield = true;
           spawnShieldParticles();
+        } else if (item.type === 'weapon') {
+          if (weaponLevel < 3) {
+            weaponLevel++;
+            let message = "";
+            if (weaponLevel === 1) message = "Bounce Shot!";
+            else if (weaponLevel === 2) message = "Double Shot!";
+            else if (weaponLevel === 3) message = "Triple Shot!";
+            showMessageWithDuration(message, "", "gold", 90); // Display for 1.5 seconds
+          }
         } else { // 'beer'
           beerScore++;
           bestBeerScore = Math.max(bestBeerScore, beerScore);
@@ -1128,7 +1176,7 @@ function render() {
         const topPipeHeight = topPipeImg.height * (pipeWidth / topPipeImg.width);
         ctx.drawImage(topPipeImg, pipe.x, pipe.y - topPipeHeight, pipeWidth, topPipeHeight);
       }
-      
+
       const bottomPipeHeight = bottomPipeImg.height * (pipeWidth / bottomPipeImg.width);
       ctx.drawImage(bottomPipeImg, pipe.x, pipe.y + pipeGap, pipeWidth, bottomPipeHeight);
 
@@ -1139,9 +1187,9 @@ function render() {
         bestScore = Math.max(bestScore, currentScore);
 
         const newPipe = {
-            x: pipes[pipes.length - 1].x + pipeGap + pipeWidth,
-            y: pipeLoc(),
-            hasTop: currentScore >= 5
+          x: pipes[pipes.length - 1].x + pipeGap + pipeWidth,
+          y: pipeLoc(),
+          hasTop: currentScore >= 5
         };
         pipes = [...pipes.slice(1), newPipe];
 
@@ -1174,6 +1222,13 @@ function render() {
           individualBeerY = Math.min(newPipe.y + pipeGap - itemHeight, individualBeerY);
 
           spawnBeerItem(beerX, individualBeerY);
+        }
+
+        // Spawn weapon item every 30 points
+        if (currentScore > 0 && currentScore % 30 === 0 && weaponLevel < 3) {
+          const weaponX = newPipe.x + (pipeWidth / 2) - (weaponItemWidth / 2); // Center horizontally in the pipe
+          const weaponY = newPipe.y + (pipeGap / 2) - (weaponItemHeight / 2); // Center vertically in the pipe gap
+          spawnWeaponItem(weaponX, weaponY);
         }
 
         // Speed increase every 20 points
@@ -1318,7 +1373,7 @@ function render() {
 
 // --- Start game if images loaded ---
 function startGameIfReady() {
-  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && beerImgLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded && shieldImgLoaded) {
+  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && beerImgLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded && shieldImgLoaded && weaponImgLoaded) {
     setup();
     animationFrameId = requestAnimationFrame(render);
   }
@@ -1331,18 +1386,30 @@ function fireShot() {
     y: flyHeight + size[1] / 2,
     width: 8,
     height: 10,
+    color: weaponColors[Math.floor(Math.random() * weaponColors.length)], // Random flashy color
+    trail: [], // For impressive visual effect
   };
 
   if (onFire) {
-    // 5-shot spread
+    // 5-shot spread (onFire overrides weapon level)
     shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 }); // Center
     shots.push({ ...baseShot, y: baseShot.y - 5, vx: shotSpeedValue, vy: 0 }); // Center-top
     shots.push({ ...baseShot, y: baseShot.y + 5, vx: shotSpeedValue, vy: 0 }); // Center-bottom
     shots.push({ ...baseShot, vx: shotSpeedValue * 0.9, vy: -shotSpeedValue * 0.4 }); // Diagonal up
     shots.push({ ...baseShot, vx: shotSpeedValue * 0.9, vy: shotSpeedValue * 0.4 }); // Diagonal down
   } else {
-    // Default single shot
-    shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 });
+    if (weaponLevel === 1) { // Bounce Shot
+      shots.push({ ...baseShot, vx: shotSpeedValue, vy: -1.5, bounce: true }); // Initial vertical speed for bounce
+    } else if (weaponLevel === 2) { // Double Shot
+      shots.push({ ...baseShot, y: baseShot.y - 7, vx: shotSpeedValue, vy: 0 });
+      shots.push({ ...baseShot, y: baseShot.y + 7, vx: shotSpeedValue, vy: 0 });
+    } else if (weaponLevel === 3) { // Triple Shot
+      shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 }); // Middle shot
+      shots.push({ ...baseShot, y: baseShot.y - 10, vx: shotSpeedValue, vy: 0 }); // Top shot
+      shots.push({ ...baseShot, y: baseShot.y + 10, vx: shotSpeedValue, vy: 0 }); // Bottom shot
+    } else { // Default single shot
+      shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 });
+    }
   }
 }
 

@@ -3,13 +3,15 @@ const ctx = canvas.getContext("2d");
 
 // --- Images ---
 const playerImg = new Image();
-playerImg.src = "./media/alienM.png";
+playerImg.src = "./media/alien.png";
 const backgroundImg = new Image();
 backgroundImg.src = "./media/backgroundMorty.png";
 const topPipeImg = new Image();
 topPipeImg.src = "./media/toppipe.png";
 const bottomPipeImg = new Image();
 bottomPipeImg.src = "./media/bottompipe.png";
+const beerImg = new Image();
+beerImg.src = "./media/beer.png";
 
 const enemy1Img = new Image();
 enemy1Img.src = "./media/insectesolo3-rbg.png";
@@ -23,6 +25,7 @@ let playerImgLoaded = false;
 let backgroundLoaded = false;
 let topPipeLoaded = false;
 let bottomPipeLoaded = false;
+let beerImgLoaded = false;
 let enemy1ImgLoaded = false;
 let enemy2ImgLoaded = false;
 let enemy3ImgLoaded = false;
@@ -31,6 +34,7 @@ playerImg.onload = () => { playerImgLoaded = true; startGameIfReady(); };
 backgroundImg.onload = () => { backgroundLoaded = true; startGameIfReady(); };
 topPipeImg.onload = () => { topPipeLoaded = true; startGameIfReady(); };
 bottomPipeImg.onload = () => { bottomPipeLoaded = true; startGameIfReady(); };
+beerImg.onload = () => { beerImgLoaded = true; startGameIfReady(); };
 enemy1Img.onload = () => { enemy1ImgLoaded = true; startGameIfReady(); };
 enemy2Img.onload = () => { enemy2ImgLoaded = true; startGameIfReady(); };
 enemy3Img.onload = () => { enemy3ImgLoaded = true; startGameIfReady(); };
@@ -86,14 +90,15 @@ const itemWidth = 30;
 const itemHeight = 30;
 
 // --- Game state ---
-let index = 0, bestScore = 0, currentScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false, hasShield = false;
+let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false;
+let onFire = false, onFireTimer = 0;
+const ON_FIRE_DURATION = 300; // 5 seconds
+let randomBeerSpawnTimer = 0;
+
 let boss2Mode = false, boss2EntryDelay = 0, postBoss2DelayActive = false, boss2Defeated = false; // New
 let boss3Mode = false, boss3EntryDelay = 0, postBoss3DelayActive = false, boss3Defeated = false; // New
 let pipes = [], flight, flyHeight, isThrusting = false, enemies = [], shots = [], items = [], particles = [];
 const shotSpeed = 10;
-let currentPowerUp = 'default';
-const powerUpTypes = ['double', 'spread', 'bouncing'];
-let powerUpStartScore = -1;
 let boss = null;
 let bossShots = [];
 let boss1ShotCount = 0;
@@ -112,39 +117,11 @@ let messageTimer = 0; // New timer for message display
 let messageColor = 'black'; // New variable for message color
 let fireworks = []; // New array for fireworks particles
 
-// --- Power-up spawn timer ---
-function spawnPowerUp() {
-  const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
-  const y = Math.random() * (canvas.height - itemHeight); // Random vertical position
-  items.push({ x: canvas.width, y, type, width: itemWidth, height: itemHeight }); // Spawn from the right edge
+// --- Beer spawn ---
+function spawnBeerItem(x, y) {
+  items.push({ x, y, width: itemWidth, height: itemHeight });
 }
 
-// --- Weapon Item spawn ---
-function spawnWeaponItem(x) {
-  const middleY = canvas.height / 2;
-  const halfItemHeight = itemHeight / 2;
-  const verticalOffset = 70; // How far from the absolute middle the "high" or "low" can be
-
-  let y;
-  if (Math.random() < 0.5) { // Randomly choose high or low
-    // High in the middle range
-    y = middleY - verticalOffset - halfItemHeight - (Math.random() * verticalOffset);
-  } else {
-    // Low in the middle range
-    y = middleY + verticalOffset - halfItemHeight + (Math.random() * verticalOffset);
-  }
-
-  // Ensure it's within canvas bounds
-  y = Math.max(itemHeight, Math.min(y, canvas.height - itemHeight * 2)); // Keep it a bit away from edges
-
-  // For now, let's make it grant a random power-up type
-  const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
-  items.push({ x, y, type: type, width: itemWidth, height: itemHeight });
-}
-
-function spawnShieldItem(x, y) {
-  items.push({ x, y, type: 'shield', width: itemWidth, height: itemHeight });
-}
 
 // --- Explosion function ---
 function createExplosion(x, y, count = 10) {
@@ -248,6 +225,7 @@ function spawnBoss3() {
 // --- Setup ---
 function setup() {
   currentScore = 0;
+  beerScore = 0;
   currentKills = 0;
   flight = jump;
   flyHeight = canvas.height / 2 - size[1] / 2 + 100;
@@ -265,6 +243,7 @@ function setup() {
   boss3 = null; // New
   boss3Shots = []; // New
   enemySpawnTimer = effectiveEnemyBaseInterval;
+  randomBeerSpawnTimer = 120 + Math.random() * 120; // 2-4 seconds
   showSpeedUpAd = false;
   speedUpAdTimer = 0;
   bossMode = false;
@@ -284,8 +263,8 @@ function setup() {
   boss2ShotCount = 0;
   boss3ShotCount = 0;
   lastAlternatingEnemyType = 'enemy1'; // Initialize for alternation
-  hasShield = false;
-  currentPowerUp = 'default';
+  onFire = false;
+  onFireTimer = 0;
   firstClickDone = false; // Reset for new game
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
@@ -370,6 +349,14 @@ function render() {
   index++;
   displaySpeed += (speed - displaySpeed) * 0.005;
 
+  // On Fire mode timer
+  if (onFire) {
+    onFireTimer--;
+    if (onFireTimer <= 0) {
+      onFire = false;
+    }
+  }
+
   // Background
   const bgX = -((index * displaySpeed / 4) % canvas.width);
   ctx.drawImage(backgroundImg, bgX, 0, canvas.width, canvas.height);
@@ -378,24 +365,19 @@ function render() {
   // Player
   if (gamePlaying) {
     ctx.drawImage(playerImg, cTenth, flyHeight, ...size);
-    if (hasShield) {
+    if (onFire) {
+      ctx.fillStyle = "rgba(255, 165, 0, 0.3)";
       ctx.beginPath();
-      ctx.arc(cTenth + size[0] / 2 - 5, flyHeight + size[1] / 2, size[0] / 2 + 10, 0, 2 * Math.PI);
-      ctx.strokeStyle = 'rgba(173, 216, 230, 0.5)';
-      ctx.lineWidth = 5;
-      ctx.stroke();
+      ctx.arc(cTenth + size[0] / 2, flyHeight + size[1] / 2, size[0], 0, 2 * Math.PI);
+      ctx.fill();
     }
+
     if (isThrusting) flight -= thrustAmount;
     flight += gravity;
     flyHeight = Math.min(flyHeight + flight, canvas.height - size[1]);
     if (flyHeight <= 0 || flyHeight >= canvas.height - size[1]) {
-      if (hasShield) {
-        hasShield = false;
-        flight = jump;
-      } else {
-        gamePlaying = false;
-        setup();
-      }
+      gamePlaying = false;
+      setup();
     }
 
     if (isShooting) {
@@ -413,22 +395,7 @@ function render() {
       shot.x += shot.vx;
       shot.y += shot.vy;
 
-      if (shot.type === 'bouncing') {
-        if (shot.y <= 0 || shot.y + shot.height >= canvas.height) {
-          shot.vy *= -1;
-        }
-      }
-
-      if (shot.type === 'double') {
-        ctx.fillStyle = '#00BFFF';
-      } else if (shot.type === 'spread') {
-        ctx.fillStyle = '#32CD32';
-      } else if (shot.type === 'bouncing') {
-        ctx.fillStyle = '#FFFF00';
-      } else {
-        ctx.fillStyle = "#FF4500";
-      }
-
+      ctx.fillStyle = "#FF4500";
       ctx.beginPath();
       ctx.arc(shot.x + shot.width / 2, shot.y + shot.height / 2, shot.width / 2, 0, 2 * Math.PI);
       ctx.fill();
@@ -546,10 +513,6 @@ function render() {
           enemies.splice(j, 1);
           currentKills++;
           bestKills = Math.max(bestKills, currentKills);
-          if (currentKills > 0 && currentKills % 20 === 0) {
-            spawnShieldItem(enemy.x, enemy.y);
-          }
-
           break;
         }
       }
@@ -604,13 +567,8 @@ function render() {
 
       // Player collision with boss
       if (cTenth < boss.x + boss.width && cTenth + size[0] > boss.x && flyHeight < boss.y + boss.height && flyHeight + size[1] > boss.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss = null;
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -670,13 +628,8 @@ function render() {
 
       // Player collision with boss2
       if (cTenth < boss2.x + boss2.width && cTenth + size[0] > boss2.x && flyHeight < boss2.y + boss2.height && flyHeight + size[1] > boss2.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss2 = null;
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -736,13 +689,8 @@ function render() {
 
       // Player collision with boss3
       if (cTenth < boss3.x + boss3.width && cTenth + size[0] > boss3.x && flyHeight < boss3.y + boss3.height && flyHeight + size[1] > boss3.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss3 = null;
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -860,13 +808,8 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        if (hasShield) {
-          hasShield = false;
-          bossShots.splice(i, 1);
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -890,13 +833,8 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss2Shots.splice(i, 1);
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -920,13 +858,8 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss3Shots.splice(i, 1);
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -950,13 +883,8 @@ function render() {
       }
 
       if (cTenth < shot.x + shot.width && cTenth + size[0] > shot.x && flyHeight < shot.y + shot.height && flyHeight + size[1] > shot.y) {
-        if (hasShield) {
-          hasShield = false;
-          boss3Shots.splice(i, 1);
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     }
 
@@ -978,46 +906,12 @@ function render() {
       ctx.fill();
     }
 
-    // Power-up expiration
-    if (powerUpStartScore !== -1 && currentScore - powerUpStartScore >= 30) {
-      currentPowerUp = 'default';
-      powerUpStartScore = -1;
-    }
-
     // Items
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
       item.x -= speed;
 
-      if (item.type === 'double') {
-        ctx.fillStyle = 'blue';
-      } else if (item.type === 'spread') {
-        ctx.fillStyle = 'green';
-      } else if (item.type === 'bouncing') {
-        ctx.fillStyle = 'yellow';
-      } else if (item.type === 'shield') {
-        ctx.fillStyle = '#ADD8E6';
-      }
-
-      ctx.beginPath();
-      ctx.arc(item.x + item.width / 2, item.y + item.height / 2, item.width / 2, 0, 2 * Math.PI);
-      ctx.fill();
-
-      ctx.fillStyle = 'black';
-      ctx.font = "bold 30px courier";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      let symbol = '';
-      if (item.type === 'double') {
-        symbol = 'D';
-      } else if (item.type === 'spread') {
-        symbol = 'T';
-      } else if (item.type === 'bouncing') {
-        symbol = 'B';
-      } else if (item.type === 'shield') {
-        symbol = 'S';
-      }
-      ctx.fillText(symbol, item.x + item.width / 2, item.y + item.height / 2);
+      ctx.drawImage(beerImg, item.x, item.y, item.width, item.height);
 
       if (item.x + item.width < 0) {
         items.splice(i, 1);
@@ -1031,11 +925,12 @@ function render() {
         flyHeight + size[1] > item.y
       ) {
         items.splice(i, 1);
-        if (item.type === 'shield') {
-          hasShield = true;
-        } else {
-          currentPowerUp = item.type;
-          powerUpStartScore = currentScore;
+        beerScore++;
+        bestBeerScore = Math.max(bestBeerScore, beerScore);
+        if (beerScore > 0 && beerScore % 10 === 0) {
+          onFire = true;
+          onFireTimer = ON_FIRE_DURATION;
+          showMessageWithDuration("ON FIRE!", "", "red", 120);
         }
       }
     }
@@ -1044,8 +939,9 @@ function render() {
     ctx.textAlign = "center";
     ctx.font = "bold 30px courier";
     ctx.fillStyle = "black";
-    ctx.fillText(`Best score : ${bestScore}`, canvas.width / 2, canvas.height / 2 - 30);
-    ctx.fillText(`Best Kills : ${bestKills}`, canvas.width / 2, canvas.height / 2 + 10);
+    ctx.fillText(`Best score : ${bestScore}`, canvas.width / 2, canvas.height / 2 - 60);
+    ctx.fillText(`Best Kills : ${bestKills}`, canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillText(`Best Beer : ${bestBeerScore}`, canvas.width / 2, canvas.height / 2 + 20);
     ctx.fillText("Click to play", canvas.width / 2, canvas.height / 2 + 90);
   }
 
@@ -1064,13 +960,23 @@ function render() {
         pipesEntered++;
         bestScore = Math.max(bestScore, currentScore);
 
+        const newPipeX = pipes[pipes.length - 1][0] + pipeGap + pipeWidth;
+        const newPipeY = pipeLoc();
+        pipes = [...pipes.slice(1), [newPipeX, newPipeY]];
 
+        // Spawn a horizontal line of beers in the new pipe gap
+        const numberOfBeers = Math.floor(Math.random() * 4) + 1; // 1 to 4 beers
+        const beerY = newPipeY + (pipeGap / 2) - (itemHeight / 2); // Vertically centered
+        const startX = pipes[pipes.length - 2][0] + pipeWidth;
+        const availableSpace = (newPipeX - startX);
 
-        // Spawn weapon item every 25 points
-        if (currentScore > 0 && currentScore % 25 === 0) {
-          const lastPipeX = pipes[pipes.length - 1][0];
-          const itemX = lastPipeX + pipeWidth + (pipeGap / 2) - (itemWidth / 2);
-          spawnWeaponItem(itemX);
+        // Add a random horizontal offset to the whole group for a bit of challenge
+        const groupOffset = (Math.random() - 0.5) * (availableSpace / 2); // Shift by up to +/- 25% of the space
+
+        for (let i = 1; i <= numberOfBeers; i++) {
+          // Distribute beers evenly, then apply the random group offset
+          const beerX = startX + (i * availableSpace / (numberOfBeers + 1)) - (itemWidth / 2) + groupOffset;
+          spawnBeerItem(beerX, beerY);
         }
 
         // Speed increase every 20 points
@@ -1080,17 +986,11 @@ function render() {
           showSpeedUpAd = true;
           speedUpAdTimer = speedUpAdDuration;
         }
-
-        pipes = [...pipes.slice(1), [pipes[pipes.length - 1][0] + pipeGap + pipeWidth, pipeLoc()]];
       }
 
       if ([pipe[0] <= cTenth + size[0], pipe[0] + pipeWidth >= cTenth, pipe[1] > flyHeight || pipe[1] + pipeGap < flyHeight + size[1]].every(Boolean)) {
-        if (hasShield) {
-          hasShield = false;
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
       }
     });
   }
@@ -1101,6 +1001,11 @@ function render() {
     if (enemySpawnTimer <= 0) {
       spawnEnemy(getEnemyType(currentScore));
       enemySpawnTimer = Math.max(effectiveEnemyMinInterval, effectiveEnemyBaseInterval - currentScore * 0.7);
+    }
+    randomBeerSpawnTimer--;
+    if (randomBeerSpawnTimer <= 0) {
+      spawnBeerItem(canvas.width, Math.random() * (canvas.height - itemHeight));
+      randomBeerSpawnTimer = 120 + Math.random() * 120; // Reset for 2-4 seconds
     }
   }
 
@@ -1144,13 +1049,8 @@ function render() {
 
       // Collision
       if (cTenth < e.x + size[0] && cTenth + size[0] > e.x && flyHeight < e.y + size[1] && flyHeight + size[1] > e.y) {
-        if (hasShield) {
-          hasShield = false;
-          enemies.splice(i, 1);
-        } else {
-          gamePlaying = false;
-          setup();
-        }
+        gamePlaying = false;
+        setup();
         break;
       }
     }
@@ -1162,6 +1062,7 @@ function render() {
   ctx.fillStyle = "black";
   ctx.fillText(`Score : ${currentScore}`, canvas.width - 10, 50);
   ctx.fillText(`Kills : ${currentKills}`, canvas.width - 10, 80);
+  ctx.fillText(`Beers : ${beerScore}`, canvas.width - 10, 110);
 
   // Speed-up message
   if (showSpeedUpAd && speedUpAdTimer > 0) {
@@ -1213,39 +1114,34 @@ function render() {
 
 // --- Start game if images loaded ---
 function startGameIfReady() {
-  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded) {
+  if (playerImgLoaded && backgroundLoaded && topPipeLoaded && bottomPipeLoaded && beerImgLoaded && enemy1ImgLoaded && enemy2ImgLoaded && enemy3ImgLoaded) {
     setup();
     animationFrameId = requestAnimationFrame(render);
   }
 }
 
 function fireShot() {
-  let shotSpeedValue = shotSpeed;
-  let shotType = currentPowerUp;
-
-  const shot = {
+  const shotSpeedValue = shotSpeed;
+  const baseShot = {
     x: cTenth + size[0],
     y: flyHeight + size[1] / 2,
     width: 8,
     height: 10,
-    type: shotType,
-    vx: shotSpeedValue,
-    vy: 0
   };
 
-  if (currentPowerUp === 'default') {
-    shots.push(shot);
-  } else if (currentPowerUp === 'double') {
-    shots.push({ ...shot, y: shot.y - 5 });
-    shots.push({ ...shot, y: shot.y + 5 });
-  } else if (currentPowerUp === 'spread') {
-    shots.push(shot);
-    shots.push({ ...shot, y: shot.y - 10, x: shot.x - 5, vx: shotSpeedValue * 0.9 });
-    shots.push({ ...shot, y: shot.y + 10, x: shot.x - 5, vx: shotSpeedValue * 0.9 });
-  } else if (currentPowerUp === 'bouncing') {
-    shots.push({ ...shot, type: 'bouncing', vy: (Math.random() - 0.5) * 4 });
+  if (onFire) {
+    // 5-shot spread
+    shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 }); // Center
+    shots.push({ ...baseShot, y: baseShot.y - 5, vx: shotSpeedValue, vy: 0 }); // Center-top
+    shots.push({ ...baseShot, y: baseShot.y + 5, vx: shotSpeedValue, vy: 0 }); // Center-bottom
+    shots.push({ ...baseShot, vx: shotSpeedValue * 0.9, vy: -shotSpeedValue * 0.4 }); // Diagonal up
+    shots.push({ ...baseShot, vx: shotSpeedValue * 0.9, vy: shotSpeedValue * 0.4 }); // Diagonal down
+  } else {
+    // Default single shot
+    shots.push({ ...baseShot, vx: shotSpeedValue, vy: 0 });
   }
 }
+
 
 // --- Controls ---
 document.addEventListener("mousedown", () => {

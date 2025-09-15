@@ -106,9 +106,10 @@ const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
 const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
 // --- Game state ---
-let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false, hasShield = false, lastWeaponCollectedScore = 0;
+let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, bossDefeated = false, hasShield = false, lastWeaponCollectedScore = 0, alienGlowTimer = 0;
 let onFire = false, onFireTimer = 0;
 const ON_FIRE_DURATION = 300; // 5 seconds
+const ALIEN_GLOW_DURATION = 15; // frames (e.g., 0.25 seconds)
 let randomBeerSpawnTimer = 0;
 
 let boss2Mode = false, boss2EntryDelay = 0, postBoss2DelayActive = false, boss2Defeated = false; // New
@@ -152,7 +153,7 @@ const itemColors = {
 
 // --- Beer spawn ---
 function generateItemParticles(item) {
-  const numParticles = 5;
+  const numParticles = 10;
   const itemCenterX = item.x + item.width / 2;
   const itemCenterY = item.y + item.height / 2;
   const particleColor = itemColors[item.type] || '#FFFFFF'; // Default to white if type not found
@@ -163,14 +164,14 @@ function generateItemParticles(item) {
     item.itemParticles.push({
       x: itemCenterX + Math.cos(angle) * radius,
       y: itemCenterY + Math.sin(angle) * radius,
-      vx: (Math.random() - 0.5) * 0.5, // Very subtle movement
-      vy: (Math.random() - 0.5) * 0.5,
-      lifespan: 60 + Math.random() * 30, // Longer lifespan
-      size: Math.random() * 1.5 + 0.5, // Small particles
+      vx: (Math.random() - 0.5) * 1, // Slightly more noticeable movement
+      vy: (Math.random() - 0.5) * 1,
+      lifespan: 90 + Math.random() * 30, // Longer lifespan
+      size: Math.random() * 2 + 1, // Slightly larger particles
       color: particleColor,
       initialAngle: angle,
       orbitRadius: radius,
-      orbitSpeed: (Math.random() - 0.5) * 0.02 // Slow orbit
+      orbitSpeed: (Math.random() - 0.5) * 0.05 // Faster orbit
     });
   }
 }
@@ -254,19 +255,26 @@ function createFireworks(x, y, count = 30) {
 }
 
 // --- On Fire Particles function ---
-function createOnFireParticles(x, y, count = 5) {
+function createOnFireParticles(x, y, count = 60) { // Increased particle count
+  const spawnRadius = size[0] / 2 + 15; // Smaller radius for the empty circle around the alien
   for (let i = 0; i < count; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 2 + 0.5;
-    const colorHue = Math.random() * 60; // 0-60 for red to yellow
+    const angle = Math.random() * Math.PI * 2; // All directions for explosion
+    const speed = Math.random() * 1 + 0.5; // Slower initial speed for "nice" particles
+    const colorHue = Math.random() * 60; // Yellow, orange, red hues (0-60)
+    const saturation = 90 + Math.random() * 10; // 90-100% saturation
+    const lightness = 80 + Math.random() * 20; // 80-100% lightness for "more light" effect
+    const initialLifespan = 30 + Math.random() * 20; // Shorter lifespan for tiny particles
     onFireParticles.push({
-      x: x + Math.cos(angle) * (size[0] / 2 + 5), // Start slightly outside player
-      y: y + Math.sin(angle) * (size[1] / 2 + 5),
-      vx: Math.cos(angle) * speed,
+      x: x + Math.cos(angle) * spawnRadius, // Spawn on the border of the circle
+      y: y + Math.sin(angle) * spawnRadius, // Spawn on the border of the circle
+      vx: Math.cos(angle) * speed, // Continue outward movement
       vy: Math.sin(angle) * speed,
-      lifespan: 20 + Math.random() * 10,
-      size: Math.random() * 2 + 1,
-      color: `hsl(${colorHue}, 100%, 50%)`,
+      lifespan: initialLifespan,
+      initialLifespan: initialLifespan, // Store initial lifespan for fading
+      size: Math.random() * 1.5 + 0.5, // Tiny particles
+      color: `hsl(${colorHue}, ${saturation}%, ${lightness}%)`,
+      gravity: 0, // No gravity for energy explosion
+      trail: [],
     });
   }
 }
@@ -290,7 +298,7 @@ function createSpeedUpParticles(x, y, count = 5) {
 }
 
 // --- Collection Particles function ---
-function createCollectionParticles(x, y, color, count = 15) {
+function createCollectionParticles(x, y, color, count = 25) {
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 3 + 1;
@@ -300,7 +308,7 @@ function createCollectionParticles(x, y, color, count = 15) {
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       lifespan: 30 + Math.random() * 15,
-      size: Math.random() * 3 + 1,
+      size: Math.random() * 1.5 + 0.5,
       color: color,
     });
   }
@@ -506,10 +514,36 @@ function render() {
 
   // On Fire mode timer
   if (onFire) {
-    onFireTimer--;
-    if (onFireTimer <= 0) {
-      onFire = false;
-    }
+    // Add continuous on-fire particles
+    createOnFireParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, 30); // Spawn more particles
+
+    // Continuous energy explosion glow effect
+    const flicker = Math.sin(index * 0.8) * 0.4 + 0.6; // More rapid and pronounced flicker
+    const glowAlpha = flicker * 2.0; // Even more intense glow, increased for "more light"
+    const glowRadius = size[0] / 2 + 15 + Math.sin(index * 0.7) * 5; // Smaller radius for empty circle, subtle pulsing
+    ctx.beginPath();
+    ctx.arc(
+      cTenth + size[0] / 2,
+      flyHeight + size[1] / 2,
+      glowRadius,
+      0,
+      2 * Math.PI
+    );
+    const hue = Math.random() * 60; // Yellow, orange, red hues (0-60)
+    ctx.fillStyle = `hsla(${hue}, 100%, 85%, ${glowAlpha * 1.0})`; // Energetic color glow, increased lightness
+    ctx.fill();
+
+    // Secondary, larger, more transparent glow
+    ctx.beginPath();
+    ctx.arc(
+      cTenth + size[0] / 2,
+      flyHeight + size[1] / 2,
+      glowRadius * 1.8, // Adjusted secondary radius
+      0,
+      2 * Math.PI
+    );
+    ctx.fillStyle = `hsla(${hue}, 100%, 85%, ${glowAlpha * 0.5})`; // More transparent, increased lightness
+    ctx.fill();
   }
 
   // Background
@@ -523,6 +557,22 @@ function render() {
   if (gamePlaying) {
     if (playerImgLoaded) {
       ctx.drawImage(playerImg, cTenth, flyHeight, ...size);
+    }
+    // Alien Glow Effect
+    if (alienGlowTimer > 0) {
+      alienGlowTimer--;
+      const glowAlpha = alienGlowTimer / ALIEN_GLOW_DURATION;
+      const glowRadius = size[0] / 2 + 2 + (1 - glowAlpha) * 5; // Grow and fade
+      ctx.beginPath();
+      ctx.arc(
+        cTenth + size[0] / 2,
+        flyHeight + size[1] / 2,
+        glowRadius,
+        0,
+        2 * Math.PI
+      );
+      ctx.fillStyle = `rgba(255, 255, 0, ${glowAlpha * 0.3})`; // Yellow glow
+      ctx.fill();
     }
     if (hasShield) {
       ctx.beginPath();
@@ -554,29 +604,6 @@ function render() {
         ctx.fill();
       }
     }
-    if (onFire) {
-      // Continuously spawn on-fire particles around the player
-      createOnFireParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, 2); // Spawn 2 particles per frame
-
-      // Update and draw onFireParticles
-      for (let i = onFireParticles.length - 1; i >= 0; i--) {
-        const p = onFireParticles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.lifespan--;
-
-        if (p.lifespan <= 0) {
-          onFireParticles.splice(i, 1);
-          continue;
-        }
-
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (p.lifespan / 30), 0, 2 * Math.PI);
-        ctx.fill();
-      }
-    }
-
     // Update and draw speedUpParticles
     for (let i = speedUpParticles.length - 1; i >= 0; i--) {
       const p = speedUpParticles[i];
@@ -786,7 +813,9 @@ function render() {
         if (boss.y <= canvas.height / 2 - boss.height / 2) {
           boss.y = canvas.height / 2 - boss.height / 2;
           boss.vy = 2; // Resume normal vertical movement
-          boss.phase = 'active';
+        }
+        if (boss.x === canvas.width - 150 && boss.y === canvas.height / 2 - boss.height / 2) {
+          boss.phase = 'active'; // Transition to active phase once both x and y are in place
         }
       } else if (boss.phase === 'active') {
         boss.y += boss.vy;
@@ -842,12 +871,7 @@ function render() {
     // Boss 2
     if (boss2) {
       if (boss2.phase === 'entry') {
-        boss2.x += boss2.vx;
         boss2.y += boss2.vy;
-        if (boss2.x <= canvas.width - boss2.width - 50) { // Check if boss has reached its target x position
-          boss2.x = canvas.width - 150; // Snap to position
-          boss2.vx = 0; // Stop horizontal movement
-        }
         if (boss2.y <= canvas.height / 2 - boss2.height / 2) {
           boss2.y = canvas.height / 2 - boss2.height / 2;
           boss2.vy = 2; // Resume normal vertical movement
@@ -909,12 +933,7 @@ function render() {
     // Boss 3
     if (boss3) {
       if (boss3.phase === 'entry') {
-        boss3.x += boss3.vx;
         boss3.y += boss3.vy;
-        if (boss3.x <= canvas.width - 150) { // Check if boss has reached its target x position
-          boss3.x = canvas.width - 150; // Snap to position
-          boss3.vx = 0; // Stop horizontal movement
-        }
         if (boss3.y <= canvas.height / 2 - boss3.height / 2) {
           boss3.y = canvas.height / 2 - boss3.height / 2;
           boss3.vy = 2; // Resume normal vertical movement
@@ -978,6 +997,8 @@ function render() {
     if (currentScore === 60 && !bossMode && !postBossDelayActive && !bossDefeated) {
       bossMode = true;
       bossEntryDelay = 60; // Initial boss entry delay
+      backgroundImg.src = "./media/backgroundM1.png"; // Change background for Level 2
+      backgroundLoaded = false; // Reset flag, will be set to true on new image load
     }
 
     // Handle initial boss2 spawn
@@ -1207,7 +1228,7 @@ function render() {
         p.x = itemCenterX + Math.cos(p.initialAngle) * p.orbitRadius + p.vx;
         p.y = itemCenterY + Math.sin(p.initialAngle) * p.orbitRadius + p.vy;
 
-        ctx.fillStyle = `${p.color}50`; // Semi-transparent
+        ctx.fillStyle = `${p.color}${Math.floor(255 * (p.lifespan / 120)).toString(16).padStart(2, '0')}`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * (p.lifespan / (60 + 30)), 0, 2 * Math.PI);
         ctx.fill();
@@ -1226,9 +1247,45 @@ function render() {
         continue;
       }
 
-      ctx.fillStyle = `${p.color}80`; // Slightly transparent
+      ctx.fillStyle = `${p.color}${Math.floor(255 * (p.lifespan / 30)).toString(16).padStart(2, '0')}`;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * (p.lifespan / 30), 0, 2 * Math.PI);
+      ctx.arc(p.x, p.y, p.size * (p.lifespan / (20 + 10)), 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    // Update and draw onFireParticles
+    for (let i = onFireParticles.length - 1; i >= 0; i--) {
+      const p = onFireParticles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += p.gravity; // Apply gravity
+      p.lifespan--;
+
+      if (p.lifespan <= 0) {
+        onFireParticles.splice(i, 1);
+        continue;
+      }
+
+      // Add current position to trail
+      p.trail.push({ x: p.x, y: p.y, lifespan: p.lifespan });
+
+      // Update and draw trail
+      for (let j = p.trail.length - 1; j >= 0; j--) {
+        const trailPart = p.trail[j];
+        trailPart.lifespan--;
+        if (trailPart.lifespan <= 0) {
+          p.trail.splice(j, 1);
+          continue;
+        }
+        ctx.fillStyle = `${p.color.substring(0, p.color.length - 1)}, ${trailPart.lifespan / p.initialLifespan * 0.5})`; // Fade out trail, max 50% opacity
+        ctx.beginPath();
+        ctx.arc(trailPart.x, trailPart.y, trailPart.size * (trailPart.lifespan / p.initialLifespan), 0, 2 * Math.PI); // Shrink trail
+        ctx.fill();
+      }
+
+      ctx.fillStyle = `${p.color.substring(0, p.color.length - 1)}, ${p.lifespan / p.initialLifespan})`; // Fade out main particle
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (p.lifespan / p.initialLifespan), 0, 2 * Math.PI); // Shrink main particle
       ctx.fill();
     }
 
@@ -1238,13 +1295,13 @@ function render() {
       item.x -= speed;
 
       // Apply sine wave for vertical oscillation (fly effect)
-      const oscillationAmplitude = 5; // Adjust as needed for desired up/down movement
-      const oscillationSpeed = 0.05; // Adjust as needed for speed of oscillation
+      const oscillationAmplitude = 3; // Adjust as needed for desired up/down movement
+      const oscillationSpeed = 0.03; // Adjust as needed for speed of oscillation
       const oscillatingY = item.initialY + Math.sin(index * oscillationSpeed + i) * oscillationAmplitude;
 
       // Apply sine wave for scaling (grow effect)
-      const scaleAmplitude = 0.05; // Max 5% scale change
-      const scaleSpeed = 0.1; // Speed of the pulsing effect
+      const scaleAmplitude = 0.03; // Max 3% scale change
+      const scaleSpeed = 0.08; // Speed of the pulsing effect
       item.scale = 1 + Math.sin(index * scaleSpeed + i) * scaleAmplitude;
 
       const scaledWidth = item.width * item.scale;
@@ -1275,6 +1332,7 @@ function render() {
         continue;
       }
 
+      // Collision detection using the rendered position and size
       if (
         cTenth < item.x + scaledWidth &&
         cTenth + size[0] > item.x &&
@@ -1282,7 +1340,9 @@ function render() {
         flyHeight + size[1] > oscillatingY
       ) {
         // Trigger collection particles
-        createCollectionParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, item.color);
+        createCollectionParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, item.color, 25);
+
+        alienGlowTimer = ALIEN_GLOW_DURATION;
 
         if (item.type === 'shield') {
           hasShield = true;
@@ -1292,19 +1352,20 @@ function render() {
             weaponLevel++;
             lastWeaponCollectedScore = currentScore; // Update when weapon is collected
             let message = "";
-            if (weaponLevel === 1) message = "Bounce Shot!";
-            else if (weaponLevel === 2) message = "Double Shot!";
-            else if (weaponLevel === 3) message = "Triple Shot!";
-            showMessageWithDuration(message, "", "gold", 90); // Display for 1.5 seconds
+            let messageColor = ""; // Declare messageColor here
+            if (weaponLevel === 1) {
+              message = "Bounce Shot!";
+              messageColor = weaponColors[1]; // Cyan
+            } else if (weaponLevel === 2) {
+              message = "Double Shot!";
+              messageColor = weaponColors[2]; // Yellow
+            } else if (weaponLevel === 3) {
+              message = "Triple Shot!";
+              messageColor = weaponColors[3]; // OrangeRed
+            }
+            showMessageWithDuration(message, "", messageColor, 90); // Display for 1.5 seconds
           } else { // If weaponLevel is already 3, give a "Max Weapon Level" message
             showMessageWithDuration("Max Weapon", "Level!", "gold", 90);
-          }
-        } else { // 'beer'
-          beerScore++;
-          bestBeerScore = Math.max(bestBeerScore, beerScore);
-          if (beerScore > 0 && beerScore % 10 === 0) {
-            onFire = true;
-            onFireTimer = ON_FIRE_DURATION;
           }
         }
         items.splice(i, 1);
@@ -1451,15 +1512,6 @@ function render() {
         if (e.y <= 0 || e.y + size[1] >= canvas.height) e.vy *= -1;
         if (enemy3ImgLoaded) {
           ctx.drawImage(enemy3Img, 0, 0, enemy3Img.width, enemy3Img.height, e.x, e.y, size[0], size[0] * (enemy3Img.height / enemy3Img.width));
-        } else {
-          ctx.drawImage(enemy1Img, 0, 0, enemy1Img.width, enemy1Img.height, e.x, e.y, size[0], size[0] * (enemy1Img.height / enemy1Img.width));
-        }
-      } else if (e.type === 'enemy4') { // New enemy4 rendering and movement
-        e.x += e.vx;
-        e.y += e.vy;
-        if (e.y <= 0 || e.y + size[1] >= canvas.height) e.vy *= -1; // Bounce off top/bottom
-        if (enemy1ImgLoaded) { // Use enemy1Img
-          ctx.drawImage(enemy1Img, 0, 0, enemy1Img.width, enemy1Img.height, e.x, e.y, size[0], size[0] * (enemy1Img.height / enemy1Img.width));
         }
       }
 

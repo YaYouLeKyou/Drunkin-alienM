@@ -9,26 +9,86 @@ function createImage(src) {
 }
 
 const playerImg = createImage("./media/alien.png");
-const backgroundImg = createImage("./media/backgroundMorty.png");
+const backgroundImg = createImage("./media/backgroundM.png");
+const backgroundM0TImg = createImage("./media/backgroundM0T.png");
+const backgroundM1Img = createImage("./media/backgroundM1.png");
+const backgroundM1TImg = createImage("./media/backgroundM1T.png");
+const backgroundM2Img = createImage("./media/backgroundM2.png");
+const backgroundM2TImg = createImage("./media/backgroundM2T.png");
+const backgroundM3Img = createImage("./media/backgroundM3.png");
+const backgroundM3TImg = createImage("./media/backgroundM3T.png");
+const backgroundM4Img = createImage("./media/backgroundM4.png");
+const backgroundM4TImg = createImage("./media/backgroundM4T.png");
+const backgroundM5Img = createImage("./media/backgroundM5.png");
+const backgroundM5TImg = createImage("./media/backgroundM5T.png");
+const backgroundM6Img = createImage("./media/backgroundM6.png");
+const backgroundM7Img = createImage("./media/background M7.png");
+const backgroundM8Img = createImage("./media/backgroundM8.png");
+
+
 const topPipeImg = createImage("./media/toppipe.png");
 const bottomPipeImg = createImage("./media/bottompipe.png");
 const beerImg = createImage("./media/beer.png");
-const enemy1Img = createImage("./media/insectesolo3-rbg.png");
-const enemy2Img = createImage("./media/insectesolo2-rbg.png");
-const enemy3Img = createImage("./media/insectesolo.png");
+const enemy1Frames = [
+  createImage("./media/enemy1/1.png"),
+  createImage("./media/enemy1/2.png"),
+  createImage("./media/enemy1/3.png"),
+];
+const enemy2Frames = [
+  createImage("./media/enemy2/1.png"),
+  createImage("./media/enemy2/2.png"),
+  createImage("./media/enemy2/3.png"),
+];
+const enemy3Img = createImage("./media/enemy3.png");
 const shieldImg = createImage("./media/shield.png");
 const weaponImg = createImage("./media/weapon.png");
 const vomitImg = createImage("./media/vomit.png");
 
 const allImages = [
-  playerImg, backgroundImg, topPipeImg, bottomPipeImg, beerImg,
-  enemy1Img, enemy2Img, enemy3Img, shieldImg, weaponImg, vomitImg
+  playerImg,
+  backgroundImg,
+  backgroundM0TImg,
+  backgroundM1Img,
+  backgroundM1TImg,
+  backgroundM2Img,
+  backgroundM2TImg,
+  backgroundM3Img,
+  backgroundM3TImg,
+  backgroundM4Img,
+  backgroundM4TImg,
+  backgroundM5Img,
+  backgroundM5TImg,
+  backgroundM6Img,
+  backgroundM7Img,
+  backgroundM8Img,
+  topPipeImg,
+  bottomPipeImg,
+  beerImg,
+  ...enemy1Frames,
+  ...enemy2Frames,
+  enemy3Img,
+  shieldImg,
+  weaponImg,
+  vomitImg,
 ];
 
-Promise.all(allImages.map(img => new Promise(resolve => img.onload = resolve))).then(() => {
-  startGameIfReady();
-});
-
+// --- Image Loading ---
+function loadAllImages() {
+  const imagePromises = allImages.map(img => {
+    return new Promise(resolve => {
+      if (img.complete) {
+        resolve();
+      } else {
+        img.onload = resolve;
+        img.onerror = () => {
+          console.error(`Failed to load image: ${img.src}`);
+          resolve(); // Resolve even on error to prevent blocking the game
+        };
+      }
+    });
+  });
+  return Promise.all(imagePromises);
+}
 
 // --- General settings ---
 let gamePlaying = false;
@@ -37,7 +97,7 @@ let animationFrameId; // To store the ID returned by requestAnimationFrame
 let gravity = 0.12;
 let initialSpeed = 4;
 let speed = initialSpeed;
-let displaySpeed = speed;
+let displaySpeed = initialSpeed; // Changed to initialSpeed for pre-game scrolling
 const speedIncreaseAmount = 0.5;
 
 let initialEnemySpeed = 3;
@@ -48,6 +108,14 @@ const size = [51, 30];
 let jump = -4.5;
 const cTenth = canvas.width / 20;
 let thrustAmount = 0.4;
+
+const ENEMY1_BASE_WIDTH = 65; // Increased size
+const ENEMY1_HITBOX_OFFSET_X = 10; // Adjust hitbox X position
+const ENEMY1_HITBOX_OFFSET_Y = 5;  // Adjust hitbox Y position
+const ENEMY1_HITBOX_WIDTH_REDUCTION = 20; // Reduce hitbox width
+const ENEMY1_HITBOX_HEIGHT_REDUCTION = 10; // Reduce hitbox height
+const ENEMY2_BASE_WIDTH = 65; // Increased size
+const ENEMY3_BASE_WIDTH = 51; // Same size as player width
 
 let isShooting = false;
 let shootInterval = 10; // frames between shots
@@ -84,13 +152,38 @@ const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
 const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
 // --- Game state ---
-let index = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, hasShield = false, lastWeaponCollectedScore = 0;
+let index = 0, bgX = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, hasShield = false, lastWeaponCollectedScore = 0, renderCount = 0, isRendering = false;
 
 let burstActive = false;
 let burstCount = 0;
 let burstTimer = 0;
 const BURST_SHOTS_PER_CLICK = 3;
 const BURST_DELAY_FRAMES = 5; // frames between shots in a burst
+
+// --- Background transition state ---
+let bg_train = [backgroundImg];
+
+
+const backgrounds = [
+  backgroundImg,    // Score 0-4
+  backgroundM1Img,  // Score 5-9
+  backgroundM2Img,  // Score 10-14
+  backgroundM3Img,  // Score 15-19
+  backgroundM4Img,  // Score 20-24
+  backgroundM5Img,  // Score 25-29
+  backgroundM6Img,  // Score 30+
+];
+
+const transitionBackgrounds = [
+  backgroundM0TImg, // Transition to M1
+  backgroundM1TImg, // Transition to M2
+  backgroundM2TImg, // Transition to M3
+  backgroundM3TImg, // Transition to M4
+  backgroundM4TImg, // Transition to M5
+  backgroundM5TImg  // Transition to M6
+];
+
+
 
 // New helper function
 function fireSingleShot(color, vx, vy, bounce = false, yOffset = 0) {
@@ -130,6 +223,7 @@ let speedUpParticles = []; // New array for speed up particles
 let itemParticles = []; // New array for particles around items
 let collectionParticles = []; // New array for particles when an item is collected
 let lastEnemyKillPosition = null;
+let lastWeaponSpawnScore = 0; // Reset for new game
 
 // --- Item Colors ---
 const itemColors = {
@@ -306,7 +400,7 @@ const effectiveEnemyMinInterval = isMobile ? enemyMinInterval * 2 : enemyMinInte
 // --- Boss spawn ---
 const bossConfigs = {
   1: {
-    image: enemy1Img,
+    image: enemy1Frames[0],
     hp: 50,
     shootTimer: 240,
     enemySpawnTimer: 180,
@@ -318,7 +412,7 @@ const bossConfigs = {
     shotColor: 'orange',
   },
   2: {
-    image: enemy2Img,
+    image: enemy2Frames[0],
     hp: 50,
     shootTimer: 210,
     enemySpawnTimer: 120,
@@ -370,11 +464,6 @@ function setup() {
   flyHeight = canvas.height / 2 - size[1] / 2 + 150;
   speed = initialSpeed;
   enemySpeed = initialEnemySpeed;
-  pipes = Array(3).fill().map((_, i) => ({
-    x: canvas.width + i * (pipeGap + pipeWidth),
-    y: pipeLoc(),
-    hasTop: currentScore >= 5
-  }));
   enemies = [];
   shots = [];
   items = [];
@@ -395,7 +484,7 @@ function setup() {
   lastAlternatingEnemyType = 'enemy1'; // Initialize for alternation
   onFire = false;
   onFireTimer = 0;
-  firstClickDone = false; // Reset for new game
+  // firstClickDone = false; // This should only be reset when the game ends, not when setup is called for initial load
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
   fireworks = []; // Clear fireworks
@@ -405,24 +494,52 @@ function setup() {
   lastEnemyKillPosition = null;
   weaponLevel = 0; // Reset weapon level
   lastWeaponCollectedScore = 0; // Reset for new game
-  lastWeaponSpawnScore = 0; // Reset for new game
+  isRendering = false;
+
+  // Reset bgX and bg_train for a new game or restart
+  bgX = 0;
+  bg_train = [backgroundImg, backgroundImg];
+
+  pipes = Array(3).fill().map((_, i) => ({
+    x: canvas.width + i * (pipeGap + pipeWidth),
+    y: pipeLoc(),
+    hasTop: currentScore >= 5
+  }));
+
+
 }
 
 // --- Spawn functions ---
 function spawnEnemy(type) {
   const x = canvas.width;
-  let y = Math.random() * (canvas.height - size[1]);
+  let enemyWidth, enemyHeight;
+  let y; // Declared 'y' here
 
   if (type === 'enemy1') {
+    enemyWidth = ENEMY1_BASE_WIDTH;
+    enemyHeight = ENEMY1_BASE_WIDTH * (enemy1Frames[0].height / enemy1Frames[0].width); // Use first frame for dimensions
     const minY = canvas.height * 0.25;
-    const maxY = canvas.height * 0.75 - size[1];
+    const maxY = canvas.height * 0.75 - enemyHeight;
     y = minY + Math.random() * (maxY - minY);
-    enemies.push({ x, y, type: 'enemy1', vx: -enemySpeed, vy: 0 });
+    enemies.push({
+      x, y, type: 'enemy1', vx: -enemySpeed, vy: 0, width: enemyWidth, height: enemyHeight,
+      frameIndex: 0, frameTimer: 0, frameDuration: 1, frameDirection: 1,
+      hitboxOffsetX: 0, // Set to 0 for testing
+      hitboxOffsetY: 0, // Set to 0 for testing
+      hitboxWidth: enemyWidth, // No reduction for testing
+      hitboxHeight: enemyHeight // No reduction for testing
+    });
   } else if (type === 'enemy2') {
+    enemyWidth = ENEMY2_BASE_WIDTH;
+    enemyHeight = ENEMY2_BASE_WIDTH * (enemy2Frames[0].height / enemy2Frames[0].width); // Use first frame for dimensions
     const vx = -enemySpeed;
     const vy = (Math.random() < 0.5 ? 1 : -1) * enemySpeed * 0.5;
-    enemies.push({ x, y, vx, vy, type: 'enemy2' });
+    y = Math.random() * (canvas.height - enemyHeight);
+    enemies.push({ x, y, vx, vy, type: 'enemy2', width: enemyWidth, height: enemyHeight, frameIndex: 0, frameTimer: 0, frameDirection: 1, frameDuration: 5 });
   } else if (type === 'enemy3') {
+    enemyWidth = ENEMY3_BASE_WIDTH;
+    enemyHeight = ENEMY3_BASE_WIDTH * (enemy3Img.height / enemy3Img.width);
+    y = Math.random() * (canvas.height - enemyHeight);
     const targetX = cTenth;
     const targetY = flyHeight;
     const dx = targetX - x;
@@ -432,8 +549,7 @@ function spawnEnemy(type) {
     const speed = enemySpeed * 1.2;
     const vx = Math.cos(angle) * speed;
     const vy = Math.sin(angle) * speed;
-
-    enemies.push({ x, y, vx, vy, type: 'enemy3' });
+    enemies.push({ x, y, vx, vy, type: 'enemy3', width: enemyWidth, height: enemyHeight });
   }
 }
 
@@ -449,16 +565,68 @@ function getEnemyType() {
   }
 }
 
+// --- Background Rendering Function ---
+function renderBackground() {
+  const currentBackgroundIndex = Math.floor(currentScore / 5);
+  let currentMainBackground = backgrounds[currentBackgroundIndex] || backgrounds[backgrounds.length - 1];
+  const previousTransition = transitionBackgrounds[currentBackgroundIndex - 1];
+
+  // FOR DEBUGGING: Make transitions very obvious
+  if (previousTransition) {
+      currentMainBackground = previousTransition;
+  }
+
+
+  // If bg_train is empty, fill it with the current main background
+  if (bg_train.length === 0) {
+    bg_train.push(currentMainBackground, currentMainBackground);
+  }
+
+  // Draw the train
+  for (let i = 0; i < bg_train.length; i++) {
+    const img = bg_train[i];
+    if (img && img.complete && img.naturalWidth !== 0) {
+      ctx.drawImage(img, bgX + i * canvas.width, 0, canvas.width, canvas.height);
+    } else {
+      // Draw a placeholder color to indicate a problem
+      ctx.fillStyle = 'red';
+      ctx.fillRect(Math.round(bgX + i * canvas.width), 0, canvas.width, canvas.height);
+    }
+  }
+
+  // Remove images that are off-screen and handle refill
+  if (bgX <= -canvas.width) {
+    bgX += canvas.width;
+    bg_train.shift();
+    // Always push the current main background (which might be a transition for debugging)
+    bg_train.push(currentMainBackground);
+  }
+}
+
 // --- Main render loop ---
 function render() {
+  if (isRendering) return;
+  isRendering = true;
+
   if (isPaused) {
     // If paused, don't update game state, just keep the current frame displayed
     animationFrameId = requestAnimationFrame(render); // Keep requesting animation frame to check for unpause
+    isRendering = false; // Reset isRendering before returning
     return;
   }
 
-  index++;
-  displaySpeed += (speed - displaySpeed) * 0.005;
+  ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear the canvas
+
+  // Always increment the index for continuous background scrolling
+  index++; renderCount++;
+
+  // Only update game state (index, speed, etc.) if the game is playing
+  if (gamePlaying) {
+    displaySpeed += (speed - displaySpeed) * 0.005;
+    bgX -= displaySpeed / 4; // Only scroll with game speed when playing
+  } else {
+    bgX -= initialSpeed / 4; // Scroll with a fixed speed when not playing
+  }
 
   // On Fire mode timer
   if (onFire) {
@@ -468,10 +636,8 @@ function render() {
     }
   }
 
-  // Background
-  const bgX = -((index * displaySpeed / 4) % canvas.width);
-  ctx.drawImage(backgroundImg, bgX, 0, canvas.width, canvas.height);
-  ctx.drawImage(backgroundImg, bgX + canvas.width, 0, canvas.width, canvas.height);
+  // Render the background by calling the new dedicated function
+  renderBackground();
 
   // Player
   if (gamePlaying) {
@@ -689,27 +855,28 @@ function render() {
 
       for (let j = enemies.length - 1; j >= 0; j--) {
         const enemy = enemies[j];
+        // Corrected collision detection: shot with enemy
         if (
-          shot.x < enemy.x + size[0] &&
+          shot.x < enemy.x + enemy.width &&
           shot.x + shot.width > enemy.x &&
-          shot.y < enemy.y + size[1] &&
+          shot.y < enemy.y + enemy.height &&
           shot.y + shot.height > enemy.y
         ) {
-          createExplosion(enemy.x + size[0] / 2, enemy.y + size[1] / 2);
+          createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2); // Explosion at enemy center
 
-          shots.splice(i, 1);
+          shots.splice(i, 1); // Remove the shot
 
-          const enemyCenterX = enemy.x + size[0] / 2;
-          const enemyCenterY = enemy.y + size[1] / 2;
+          const enemyCenterX = enemy.x + enemy.width / 2;
+          const enemyCenterY = enemy.y + enemy.height / 2;
           lastEnemyKillPosition = { x: enemyCenterX - itemWidth / 2, y: enemyCenterY - itemHeight / 2 };
 
-          enemies.splice(j, 1);
+          enemies.splice(j, 1); // Remove the enemy
           currentKills++;
           bestKills = Math.max(bestKills, currentKills);
           if (currentKills > 0 && currentKills % 10 === 0) {
             spawnShieldItem(lastEnemyKillPosition.x, lastEnemyKillPosition.y);
           }
-          break;
+          break; // Break from inner loop (enemies) as the shot has hit an enemy
         }
       }
     }
@@ -800,7 +967,7 @@ function render() {
       bossEntryDelay--;
       // Keep existing pipes and enemies moving until off-screen
       pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
-      enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
+      enemies = enemies.filter(enemy => enemy.x + enemy.width > 0);
     }
 
     // Handle post-boss delay
@@ -809,7 +976,7 @@ function render() {
         bossEntryDelay--;
         // Keep existing pipes and enemies moving until off-screen
         pipes = pipes.filter(pipe => pipe.x + pipeWidth > 0);
-        enemies = enemies.filter(enemy => enemy.x + size[0] > 0);
+        enemies = enemies.filter(enemy => enemy.x + enemy.width > 0);
       } else {
         postBossDelayActive = false;
         pipesEntered = 0; // Allow pipes to start spawning again
@@ -937,9 +1104,8 @@ function render() {
         ctx.drawImage(shieldImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
       } else if (item.type === 'weapon') {
         ctx.drawImage(weaponImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
-      } else if (item.type === 'vomit') {
-        ctx.drawImage(vomitImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
-      } else { // 'beer'
+      }
+      else { // 'beer'
         ctx.drawImage(beerImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
       }
 
@@ -976,13 +1142,6 @@ function render() {
           if (weaponLevel > 0) {
             weaponLevel = 0;
             showMessageWithDuration("Basic Shot!", "", "orange", 90);
-          }
-        } else { // 'beer'
-          beerScore++;
-          bestBeerScore = Math.max(bestBeerScore, beerScore);
-          if (beerScore > 0 && beerScore % 100 === 0) {
-            onFire = true;
-            onFireTimer = ON_FIRE_DURATION;
           }
         }
         items.splice(i, 1);
@@ -1113,28 +1272,64 @@ function render() {
       e.x += e.vx;
       e.y += e.vy;
 
+      // Update animation frame
+      if (e.type === 'enemy1' || e.type === 'enemy2') {
+        e.frameTimer++;
+        if (e.frameTimer >= e.frameDuration) {
+          e.frameTimer = 0;
+          // Check if the next frame index would be out of bounds
+          // enemy1Frames and enemy2Frames have 3 frames (indices 0, 1, 2)
+          const framesArray = (e.type === 'enemy1') ? enemy1Frames : enemy2Frames;
+          // Reverse direction if the next frame would be out of bounds
+          if (e.frameIndex + e.frameDirection >= framesArray.length || e.frameIndex + e.frameDirection < 0) {
+            e.frameDirection *= -1; // Reverse direction
+          }
+          // Now update frameIndex, which is guaranteed to be within bounds
+          e.frameIndex += e.frameDirection;
+          // Ensure frameIndex is always within valid range [0, framesArray.length - 1]
+          e.frameIndex = Math.max(0, Math.min(e.frameIndex, framesArray.length - 1));
+        }
+      }
+
       if (e.type === 'enemy2' || e.type === 'enemy3') {
-        if (e.y <= 0 || e.y + size[1] >= canvas.height) {
+        if (e.y <= 0 || e.y + e.height >= canvas.height) { // Use e.height here
           e.vy *= -1;
         }
       }
 
+      let currentEnemyImage;
       if (e.type === 'enemy1') {
-        ctx.drawImage(enemy1Img, 0, 0, enemy1Img.width, enemy1Img.height, e.x, e.y, size[0], size[0] * (enemy1Img.height / enemy1Img.width));
+        currentEnemyImage = enemy1Frames[e.frameIndex];
       } else if (e.type === 'enemy2') {
-        ctx.drawImage(enemy2Img, 0, 0, enemy2Img.width, enemy2Img.height, e.x, e.y, size[0], size[0] * (enemy2Img.height / enemy2Img.width));
+        currentEnemyImage = enemy2Frames[e.frameIndex];
       } else if (e.type === 'enemy3') {
-        ctx.drawImage(enemy3Img, 0, 0, enemy3Img.width, enemy3Img.height, e.x, e.y, size[0], size[0] * (enemy3Img.height / enemy3Img.width));
+        currentEnemyImage = enemy3Img; // Enemy3 does not animate
+      }
+
+
+      if (currentEnemyImage) {
+        ctx.drawImage(currentEnemyImage, 0, 0, currentEnemyImage.width, currentEnemyImage.height, e.x, e.y, e.width, e.height);
       }
 
       // Remove off-screen
-      if (e.x + size[0] < 0) {
+      if (e.x + e.width < 0) {
         enemies.splice(i, 1);
         continue;
       }
 
       // Collision
-      if (cTenth < e.x + size[0] && cTenth + size[0] > e.x && flyHeight < e.y + size[1] && flyHeight + size[1] > e.y) {
+      if (
+        (e.type === 'enemy1' &&
+          cTenth < (e.x + e.hitboxOffsetX) + e.hitboxWidth &&
+          cTenth + size[0] > (e.x + e.hitboxOffsetX) &&
+          flyHeight < (e.y + e.hitboxOffsetY) + e.hitboxHeight &&
+          flyHeight + size[1] > (e.y + e.hitboxOffsetY)) ||
+        (e.type !== 'enemy1' &&
+          cTenth < e.x + e.width &&
+          cTenth + size[0] > e.x &&
+          flyHeight < e.y + e.height &&
+          flyHeight + size[1] > e.y)
+      ) {
         if (hasShield) {
           hasShield = false;
           enemies.splice(i, 1);
@@ -1199,13 +1394,17 @@ function render() {
     ctx.fill();
   }
 
+  isRendering = false; // Reset isRendering before requesting next frame
   animationFrameId = requestAnimationFrame(render);
 }
 
 // --- Start game if images loaded ---
 function startGameIfReady() {
-  setup();
-  animationFrameId = requestAnimationFrame(render);
+  loadAllImages().then(() => {
+    setup();
+    index = 0;
+    animationFrameId = requestAnimationFrame(render);
+  });
 }
 
 function fireShot() {
@@ -1243,36 +1442,34 @@ function fireShot() {
 
 
 // --- Controls ---
-document.addEventListener("mousedown", () => {
-  if (!firstClickDone) {
-    firstClickDone = true;
-    showMessageWithDuration("Level 1", "Start!", "white", 120); // Display for 2 seconds
-  }
-  if (gamePlaying && !isPaused) { // Only allow shooting if not paused
-    isShooting = true;
-    fireShot(); // Fire immediately on click
-  }
-  if (!isPaused) { // Only start game if not paused
+canvas.addEventListener("mousedown", () => {
+  if (!gamePlaying && !isPaused) { // If game is not playing and not paused, start the game
+    // setup(); // Initialize game state
     gamePlaying = true;
     isThrusting = true;
+    firstClickDone = true; // Mark first click as done
+    showMessageWithDuration("Level 1", "Start!", "white", 120); // Display for 2 seconds
+  } else if (gamePlaying && !isPaused) { // If game is already playing and not paused, allow shooting
+    isShooting = true;
+    isThrusting = true; // Add this line to make the alien jump on click
+    fireShot(); // Fire immediately on click
   }
 });
 document.addEventListener("mouseup", () => {
   isShooting = false;
   isThrusting = false;
 });
-document.addEventListener("touchstart", () => {
-  if (!firstClickDone) {
-    firstClickDone = true;
-    showMessageWithDuration("Level 1", "Start!", "white", 120); // Display for 2 seconds
-  }
-  if (gamePlaying && !isPaused) { // Only allow shooting if not paused
-    isShooting = true;
-    fireShot(); // Fire immediately on touch
-  }
-  if (!isPaused) { // Only start game if not paused
+canvas.addEventListener("touchstart", () => {
+  if (!gamePlaying && !isPaused) { // If game is not playing and not paused, start the game
+    // setup(); // Initialize game state
     gamePlaying = true;
     isThrusting = true;
+    firstClickDone = true; // Mark first click as done
+    showMessageWithDuration("Level 1", "Start!", "white", 120); // Display for 2 seconds
+  } else if (gamePlaying && !isPaused) { // If game is already playing and not paused, allow shooting
+    isShooting = true;
+    isThrusting = true; // Add this line to make the alien jump on touch
+    fireShot(); // Fire immediately on touch
   }
 });
 document.addEventListener("touchend", () => {
@@ -1301,3 +1498,4 @@ function togglePause() {
     pauseButton.textContent = "Pause";
   }
 }
+startGameIfReady();

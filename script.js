@@ -8,7 +8,7 @@ function createImage(src) {
   return img;
 }
 
-const playerImg = createImage("./media/alien.png");
+const playerImg = createImage("./media/alienM.png");
 const backgroundImg = createImage("./media/backgroundM.png");
 const backgroundM0TImg = createImage("./media/backgroundM0T.png");
 const backgroundM1Img = createImage("./media/backgroundM1.png");
@@ -23,7 +23,7 @@ const backgroundM5Img = createImage("./media/backgroundM5.png");
 const backgroundM5TImg = createImage("./media/backgroundM5T.png");
 const backgroundM6Img = createImage("./media/backgroundM6.png");
 const backgroundM7Img = createImage("./media/background M7.png");
-const backgroundM8Img = createImage("./media/backgroundM8.png");
+
 
 
 const topPipeImg = createImage("./media/toppipe.png");
@@ -60,7 +60,6 @@ const allImages = [
   backgroundM5TImg,
   backgroundM6Img,
   backgroundM7Img,
-  backgroundM8Img,
   topPipeImg,
   bottomPipeImg,
   beerImg,
@@ -567,15 +566,8 @@ function getEnemyType() {
 
 // --- Background Rendering Function ---
 function renderBackground() {
-  const currentBackgroundIndex = Math.floor(currentScore / 5);
+  const currentBackgroundIndex = Math.floor(currentScore / 30);
   let currentMainBackground = backgrounds[currentBackgroundIndex] || backgrounds[backgrounds.length - 1];
-  const previousTransition = transitionBackgrounds[currentBackgroundIndex - 1];
-
-  // FOR DEBUGGING: Make transitions very obvious
-  if (previousTransition) {
-      currentMainBackground = previousTransition;
-  }
-
 
   // If bg_train is empty, fill it with the current main background
   if (bg_train.length === 0) {
@@ -598,8 +590,26 @@ function renderBackground() {
   if (bgX <= -canvas.width) {
     bgX += canvas.width;
     bg_train.shift();
-    // Always push the current main background (which might be a transition for debugging)
-    bg_train.push(currentMainBackground);
+
+    const lastImageInTrain = bg_train[bg_train.length - 1] || currentMainBackground;
+    const lastImageIsTransition = transitionBackgrounds.includes(lastImageInTrain);
+
+    if (lastImageIsTransition) {
+        const transitionIndex = transitionBackgrounds.indexOf(lastImageInTrain);
+        bg_train.push(backgrounds[transitionIndex + 1]);
+    } else {
+        const lastImageIndex = backgrounds.indexOf(lastImageInTrain);
+        if (currentBackgroundIndex > lastImageIndex && lastImageIndex > -1) {
+            const transition = transitionBackgrounds[lastImageIndex];
+            if (transition) {
+                bg_train.push(transition);
+            } else {
+                bg_train.push(currentMainBackground);
+            }
+        } else {
+            bg_train.push(currentMainBackground);
+        }
+    }
   }
 }
 
@@ -1143,6 +1153,9 @@ function render() {
             weaponLevel = 0;
             showMessageWithDuration("Basic Shot!", "", "orange", 90);
           }
+        } else if (item.type === 'beer') {
+          beerScore++;
+          bestBeerScore = Math.max(bestBeerScore, beerScore);
         }
         items.splice(i, 1);
       }

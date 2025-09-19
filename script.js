@@ -1532,7 +1532,7 @@ function fireSpecialWeapon() {
 
 
 // --- Controls ---
-canvas.addEventListener("mousedown", () => {
+document.addEventListener("mousedown", () => {
   if (!gamePlaying && !isPaused) { // If game is not playing and not paused, start the game
     gamePlaying = true;
     isThrusting = true;
@@ -1553,7 +1553,7 @@ document.addEventListener("mouseup", () => {
   isShooting = false;
   isThrusting = false;
 });
-canvas.addEventListener("touchstart", () => {
+document.addEventListener("touchstart", () => {
   if (!gamePlaying && !isPaused) { // If game is not playing and not paused, start the game
     gamePlaying = true;
     isThrusting = true;

@@ -157,7 +157,7 @@ let index = 0, bgX = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeer
 
 
 
-let hasSpecialWeapon = false, specialWeaponType = 'clear';
+let hasSpecialWeapon = false;
 let specialWeaponTimer = 0;
 const SPECIAL_WEAPON_DURATION = 600; // 10 seconds * 60 fps
 let lastSpecialWeaponSpawnScore = 0;
@@ -220,7 +220,7 @@ let messageLine2 = ''; // New variable for displaying messages - second line
 let showMessage = false; // New flag to control message display
 let messageTimer = 0; // New timer for message display
 let messageColor = 'black'; // New variable for message color
-let fireworks = [], lightningBolts = []; // New array for fireworks particles
+let fireworks = []; // New array for fireworks particles
 let onFireParticles = []; // New array for on fire particles
 let speedUpParticles = []; // New array for speed up particles
 let itemParticles = []; // New array for particles around items
@@ -239,19 +239,25 @@ const itemColors = {
 
 // --- Beer spawn ---
 function generateItemParticles(item) {
-  const numParticles = 15; // More particles
-  const particleColor = itemColors[item.type] || '#FFFFFF';
+  const numParticles = 1;
+  const itemCenterX = item.x + item.width / 2;
+  const itemCenterY = item.y + item.height / 2;
+  const particleColor = itemColors[item.type] || '#FFFFFF'; // Default to white if type not found
 
   for (let i = 0; i < numParticles; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const radius = item.width / 2 + Math.random() * 10;
+    const radius = Math.random() * (item.width / 2 + 5); // Particles within/slightly outside item
     item.itemParticles.push({
-      lifespan: 30 + Math.random() * 30,
-      size: Math.random() * 1.5 + 1,
+      x: itemCenterX + Math.cos(angle) * radius,
+      y: itemCenterY + Math.sin(angle) * radius,
+      vx: (Math.random() - 0.5) * 0.5, // Very subtle movement
+      vy: (Math.random() - 0.5) * 0.5,
+      lifespan: 60 + Math.random() * 30, // Longer lifespan
+      size: Math.random() * 1.5 + 0.5, // Small particles
       color: particleColor,
       initialAngle: angle,
       orbitRadius: radius,
-      orbitSpeed: (Math.random() - 0.5) * 0.05
+      orbitSpeed: (Math.random() - 0.5) * 0.02 // Slow orbit
     });
   }
 }
@@ -266,9 +272,6 @@ function spawnItem(type, x, y) {
   };
   const config = itemConfig[type];
   const item = { x, y, initialY: y, type, width: config.width, height: config.height, color: itemColors[type], itemParticles: [], scale: 1 };
-  if (type === 'specialWeapon') {
-    item.specialWeaponType = Math.random() < 0.5 ? 'lightning' : 'clear';
-  }
   items.push(item);
 
   generateItemParticles(item);
@@ -337,57 +340,6 @@ function createFireworks(x, y, count = 30) {
       color: `hsl(${Math.random() * 360}, 100%, 50%)`,
     };
   });
-}
-
-function createLightningBolt(x1, y1, x2, y2, isBranch = false) {
-    const bolt = {
-        x1, y1, x2, y2,
-        isBranch,
-        segments: [],
-        branches: []
-    };
-
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    const segmentLength = 10;
-    const numSegments = Math.floor(distance / segmentLength);
-
-    if (numSegments <= 0) {
-        bolt.segments.push({x: x1, y: y1});
-        bolt.segments.push({x: x2, y: y2});
-        return bolt;
-    }
-
-    bolt.segments.push({x: x1, y: y1});
-    for (let i = 1; i < numSegments; i++) {
-        const nextX = x1 + i * (dx / numSegments);
-        const nextY = y1 + i * (dy / numSegments);
-        const offsetX = (Math.random() - 0.5) * 25;
-        const offsetY = (Math.random() - 0.5) * 25;
-        bolt.segments.push({
-            x: nextX + offsetX,
-            y: nextY + offsetY
-        });
-
-        // Add a branch?
-        if (!isBranch && Math.random() > 0.9 && i > 2 && i < numSegments - 2) {
-            const branchX2 = nextX + offsetX + (Math.random() - 0.5) * (distance / 1.5);
-            const branchY2 = nextY + offsetY + (Math.random() - 0.5) * (distance / 1.5);
-            bolt.branches.push(createLightningBolt(nextX + offsetX, nextY + offsetY, branchX2, branchY2, true));
-        }
-    }
-    bolt.segments.push({x: x2, y: y2});
-
-    return bolt;
-}
-
-function addLightningBolt(x1, y1, x2, y2) {
-    const mainBolt = createLightningBolt(x1, y1, x2, y2, false);
-    lightningBolts.push({
-        bolt: mainBolt,
-        lifespan: 30 // longer lifespan for more flicker
-    });
 }
 
 // --- On Fire Particles function ---
@@ -548,13 +500,10 @@ function setup() {
   lastOnFireBeerScore = 0; // Initialize the new variable
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
-  fireworks = [];
-  lightningBolts = [];
+  fireworks = []; // Clear fireworks
   onFireParticles = []; // Clear on fire particles
   speedUpParticles = []; // Clear speed up particles
   hasShield = false;
-  hasSpecialWeapon = false;
-  specialWeaponType = 'clear';
   lastEnemyKillPosition = null;
   weaponLevel = 0; // Reset weapon level
   lastWeaponCollectedScore = 0; // Reset for new game
@@ -687,26 +636,6 @@ function renderBackground() {
       }
     }
   }
-}
-
-// --- Main render loop ---
-function drawBolt(bolt, lifespan) {
-    const alpha = Math.random() * 0.5 + 0.5; // Flicker effect
-    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * (lifespan / 30)})`;
-    ctx.lineWidth = bolt.isBranch ? 2 : 4;
-    ctx.beginPath();
-    bolt.segments.forEach((seg, index) => {
-        if (index === 0) {
-            ctx.moveTo(seg.x, seg.y);
-        } else {
-            ctx.lineTo(seg.x, seg.y);
-        }
-    });
-    ctx.stroke();
-
-    bolt.branches.forEach(branch => {
-        drawBolt(branch, lifespan);
-    });
 }
 
 // --- Main render loop ---
@@ -899,11 +828,6 @@ function render() {
         activeBoss.hp--;
         activeBoss.shotCount++;
         createExplosion(shot.x, shot.y);
-
-        if (activeBoss.shotCount % 100 === 0) {
-          activeBoss.maxHp += 100;
-          activeBoss.hp += 100;
-        }
 
         if (activeBoss.hp <= 0) {
           createExplosion(activeBoss.x + activeBoss.width / 2, activeBoss.y + activeBoss.height / 2, 50);
@@ -1172,33 +1096,25 @@ function render() {
       const itemCenterX = item.x + item.width / 2;
       const itemCenterY = oscillatingY + item.height / 2;
 
-      ctx.save();
-      ctx.shadowColor = 'white';
-      ctx.shadowBlur = 15;
-
       for (let j = item.itemParticles.length - 1; j >= 0; j--) {
         const p = item.itemParticles[j];
         p.lifespan--;
 
         if (p.lifespan <= 0) {
-            // Reset particle
-            p.lifespan = 30 + Math.random() * 30;
-            p.initialAngle = Math.random() * Math.PI * 2;
-            p.orbitRadius = item.width / 2 + Math.random() * 10;
+          item.itemParticles.splice(j, 1);
+          continue;
         }
 
         // Update particle position relative to the item's center
         p.initialAngle += p.orbitSpeed; // Orbit
-        const x = itemCenterX + Math.cos(p.initialAngle) * p.orbitRadius;
-        const y = itemCenterY + Math.sin(p.initialAngle) * p.orbitRadius;
+        p.x = itemCenterX + Math.cos(p.initialAngle) * p.orbitRadius + p.vx;
+        p.y = itemCenterY + Math.sin(p.initialAngle) * p.orbitRadius + p.vy;
 
-        ctx.globalAlpha = p.lifespan / 60;
-        ctx.fillStyle = p.color;
+        ctx.fillStyle = `${p.color}50`; // Semi-transparent
         ctx.beginPath();
-        ctx.arc(x, y, p.size, 0, 2 * Math.PI);
+        ctx.arc(p.x, p.y, p.size * (p.lifespan / (60 + 30)), 0, 2 * Math.PI);
         ctx.fill();
       }
-      ctx.restore();
 
       // Apply sine wave for scaling (grow effect)
       const scaleAmplitude = 0.05; // Max 5% scale change
@@ -1256,13 +1172,8 @@ function render() {
           }
         } else if (item.type === 'specialWeapon') {
           hasSpecialWeapon = true;
-          specialWeaponType = item.specialWeaponType;
           specialWeaponTimer = SPECIAL_WEAPON_DURATION;
-          if (specialWeaponType === 'lightning') {
-            showMessageWithDuration("Lightning Storm!", "", "yellow", 120);
-          } else {
-            showMessageWithDuration("Special Weapon!", "", "gold", 90);
-          }
+          showMessageWithDuration("Special Weapon!", "", "gold", 90);
         } else if (item.type === 'vomit') {
           if (weaponLevel > 0) {
             weaponLevel = 0;
@@ -1552,23 +1463,6 @@ function render() {
     ctx.fill();
   }
 
-  // Update and draw lightning bolts
-  for (let i = lightningBolts.length - 1; i >= 0; i--) {
-    const boltInfo = lightningBolts[i];
-    boltInfo.lifespan--;
-
-    if (boltInfo.lifespan <= 0) {
-      lightningBolts.splice(i, 1);
-      continue;
-    }
-
-    ctx.save();
-    ctx.shadowColor = 'white';
-    ctx.shadowBlur = 30;
-    drawBolt(boltInfo.bolt, boltInfo.lifespan);
-    ctx.restore();
-  }
-
   isRendering = false; // Reset isRendering before requesting next frame
   animationFrameId = requestAnimationFrame(render);
 }
@@ -1610,80 +1504,30 @@ function fireShot() {
   }
 }
 
-function fireLightningStorm() {
-    // Screen flash
-    const flash = document.createElement('div');
-    flash.style.position = 'absolute';
-    flash.style.top = '0';
-    flash.style.left = '0';
-    flash.style.width = '100%';
-    flash.style.height = '100%';
-    flash.style.backgroundColor = 'white';
-    flash.style.opacity = '0.7';
-    flash.style.zIndex = '100';
-    document.body.appendChild(flash);
-    setTimeout(() => {
-        flash.remove();
-    }, 100);
-
-    const numBolts = 15; // More bolts
-    for (let i = 0; i < numBolts; i++) {
-        const startX = Math.random() * canvas.width;
-        const startY = 0;
-        const endX = startX + (Math.random() - 0.5) * 200; // Wider spread
-        const endY = canvas.height;
-        addLightningBolt(startX, startY, endX, endY);
-    }
-
-    // Target existing enemies
-    enemies.forEach(enemy => {
-        const startX = enemy.x + enemy.width / 2 + (Math.random() - 0.5) * 50;
-        const startY = 0;
-        const endX = enemy.x + enemy.width / 2;
-        const endY = enemy.y + enemy.height / 2;
-        addLightningBolt(startX, startY, endX, endY);
-        createExplosion(endX, endY, 10); // Add an explosion at the target
-    });
-
-    // Destroy all enemies after a short delay to let the lightning be seen
-    setTimeout(() => {
-        enemies.forEach(enemy => {
-            createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 30);
-            currentKills++;
-            bestKills = Math.max(bestKills, currentKills);
-        });
-        enemies = [];
-    }, 200); // Increased delay
-}
-
 function fireSpecialWeapon() {
-  if (specialWeaponType === 'lightning') {
-    fireLightningStorm();
-  } else { // 'clear'
-    // Fancy flash effect
-    particles.push({
-      x: cTenth + size[0] / 2,
-      y: flyHeight + size[1] / 2,
-      vx: 0,
-      vy: 0,
-      lifespan: 60,
-      size: 10,
-      isFlash: true,
-      maxSize: canvas.width,
-      color: 'white'
-    });
-
-    // Destroy all enemies
-    enemies.forEach(enemy => {
-      createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 30);
-      currentKills++;
-      bestKills = Math.max(bestKills, currentKills);
-    });
-    enemies = [];
-  }
-
   hasSpecialWeapon = false;
   specialWeaponTimer = 0;
+
+  // Fancy flash effect
+  particles.push({
+    x: cTenth + size[0] / 2,
+    y: flyHeight + size[1] / 2,
+    vx: 0,
+    vy: 0,
+    lifespan: 60,
+    size: 10,
+    isFlash: true,
+    maxSize: canvas.width,
+    color: 'white'
+  });
+
+  // Destroy all enemies
+  enemies.forEach(enemy => {
+    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 30);
+    currentKills++;
+    bestKills = Math.max(bestKills, currentKills);
+  });
+  enemies = [];
 }
 
 

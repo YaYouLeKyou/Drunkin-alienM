@@ -82,7 +82,7 @@ function loadAllImages() {
       } else {
         img.onload = resolve;
         img.onerror = () => {
-          console.error(`Failed to load image: ${img.src}`);
+
           resolve(); // Resolve even on error to prevent blocking the game
         };
       }
@@ -153,7 +153,7 @@ const fixedHorizontalBeerSpacing = 50; // New constant for consistent spacing
 const verticalBeerOffsetAmount = 24; // New constant for vertical variation within a line
 
 // --- Game state ---
-let index = 0, bgX = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, hasShield = false, lastWeaponCollectedScore = 0, renderCount = 0, isRendering = false;
+let index = 0, bgX = 0, bestScore = 0, currentScore = 0, beerScore = 0, bestBeerScore = 0, currentKills = 0, bestKills = 0, bossMode = false, bossEntryDelay = 0, pipesEntered = 0, postBossDelayActive = false, hasShield = false, lastWeaponCollectedScore = 0, renderCount = 0, isRendering = false, lastOnFireBeerScore = 0, itemSpawnCounter = 0, weaponCooldown = 0, specialWeaponCooldown = 0, vomitCooldown = 0;
 
 
 
@@ -167,13 +167,14 @@ let bg_train = [backgroundImg];
 
 
 const backgrounds = [
-  backgroundImg,    // Score 0-4
-  backgroundM1Img,  // Score 5-9
-  backgroundM2Img,  // Score 10-14
-  backgroundM3Img,  // Score 15-19
-  backgroundM4Img,  // Score 20-24
-  backgroundM5Img,  // Score 25-29
-  backgroundM6Img,  // Score 30+
+  backgroundImg,    // Score 0-29
+  backgroundM1Img,  // Score 30-59
+  backgroundM2Img,  // Score 60-89
+  backgroundM3Img,  // Score 90-119
+  backgroundM4Img,  // Score 120-149
+  backgroundM5Img,  // Score 150-179
+  backgroundM6Img,  // Score 180-239
+  backgroundM7Img,  // Score 240+
 ];
 
 const transitionBackgrounds = [
@@ -201,9 +202,9 @@ function fireSingleShot(color, vx, vy, bounce = false, yOffset = 0) {
 }
 
 let onFire = false, onFireTimer = 0;
-const ON_FIRE_DURATION = 900; // 15 seconds
+const ON_FIRE_DURATION = 600; // 10 seconds
 let randomBeerSpawnTimer = 0;
-let boss1Defeated = false, boss2Defeated = false, boss3Defeated = false;
+let boss1Defeated = false, boss2Defeated = false, boss3Defeated = false, boss3AppearedOnce = false, boss3AppearedTwice = false;
 
 let pipes = [], flight, flyHeight, isThrusting = false, enemies = [], shots = [], items = [], particles = [], shieldParticles = [];
 const shotSpeed = 10;
@@ -238,7 +239,7 @@ const itemColors = {
 
 // --- Beer spawn ---
 function generateItemParticles(item) {
-  const numParticles = 5;
+  const numParticles = 1;
   const itemCenterX = item.x + item.width / 2;
   const itemCenterY = item.y + item.height / 2;
   const particleColor = itemColors[item.type] || '#FFFFFF'; // Default to white if type not found
@@ -272,6 +273,7 @@ function spawnItem(type, x, y) {
   const config = itemConfig[type];
   const item = { x, y, initialY: y, type, width: config.width, height: config.height, color: itemColors[type], itemParticles: [], scale: 1 };
   items.push(item);
+
   generateItemParticles(item);
 }
 
@@ -400,7 +402,7 @@ const enemyMinInterval = 40;
 
 // Adjust for mobile
 const effectiveEnemyBaseInterval = isMobile ? enemyBaseInterval * 2 : enemyBaseInterval;
-const effectiveEnemyMinInterval = isMobile ? enemyMinInterval * 2 : enemyMinInterval;
+let effectiveEnemyMinInterval = isMobile ? enemyMinInterval * 2 : enemyMinInterval;
 
 // --- Boss spawn ---
 const bossConfigs = {
@@ -418,7 +420,7 @@ const bossConfigs = {
   },
   2: {
     image: enemy2Frames[0],
-    hp: 50,
+    hp: 100,
     shootTimer: 210,
     enemySpawnTimer: 120,
     enemyType: 'enemy2',
@@ -431,7 +433,7 @@ const bossConfigs = {
   },
   3: {
     image: enemy3Img,
-    hp: 50,
+    hp: 150,
     shootTimer: 210,
     enemySpawnTimer: 120,
     enemyType: 'enemy3',
@@ -445,7 +447,10 @@ const bossConfigs = {
 };
 
 function spawnBoss(level) {
-  const config = bossConfigs[level];
+  let config = { ...bossConfigs[level] };
+  if (level === 3 && boss3AppearedOnce) {
+    config.hp = 300;
+  }
   activeBoss = {
     level,
     ...config,
@@ -486,10 +491,13 @@ function setup() {
   boss1Defeated = false;
   boss2Defeated = false;
   boss3Defeated = false;
+  boss3AppearedOnce = false;
+  boss3AppearedTwice = false;
+  effectiveEnemyMinInterval = isMobile ? enemyMinInterval * 2 : enemyMinInterval;
   lastAlternatingEnemyType = 'enemy1'; // Initialize for alternation
   onFire = false;
   onFireTimer = 0;
-  // firstClickDone = false; // This should only be reset when the game ends, not when setup is called for initial load
+  lastOnFireBeerScore = 0; // Initialize the new variable
   showMessage = false; // Reset message display
   messageTimer = 0; // Reset message timer
   fireworks = []; // Clear fireworks
@@ -499,6 +507,10 @@ function setup() {
   lastEnemyKillPosition = null;
   weaponLevel = 0; // Reset weapon level
   lastWeaponCollectedScore = 0; // Reset for new game
+  itemSpawnCounter = 0; // Initialize for new game
+  weaponCooldown = 0;
+  specialWeaponCooldown = 0;
+  vomitCooldown = 0;
   isRendering = false;
 
   // Reset bgX and bg_train for a new game or restart
@@ -572,7 +584,14 @@ function getEnemyType() {
 
 // --- Background Rendering Function ---
 function renderBackground() {
-  const currentBackgroundIndex = Math.floor(currentScore / 30);
+  let currentBackgroundIndex;
+  if (currentScore >= 240) {
+    currentBackgroundIndex = 7;
+  } else if (currentScore >= 180) {
+    currentBackgroundIndex = 6;
+  } else {
+    currentBackgroundIndex = Math.floor(currentScore / 30);
+  }
   let currentMainBackground = backgrounds[currentBackgroundIndex] || backgrounds[backgrounds.length - 1];
 
   // If bg_train is empty, fill it with the current main background
@@ -601,20 +620,20 @@ function renderBackground() {
     const lastImageIsTransition = transitionBackgrounds.includes(lastImageInTrain);
 
     if (lastImageIsTransition) {
-        const transitionIndex = transitionBackgrounds.indexOf(lastImageInTrain);
-        bg_train.push(backgrounds[transitionIndex + 1]);
+      const transitionIndex = transitionBackgrounds.indexOf(lastImageInTrain);
+      bg_train.push(backgrounds[transitionIndex + 1]);
     } else {
-        const lastImageIndex = backgrounds.indexOf(lastImageInTrain);
-        if (currentBackgroundIndex > lastImageIndex && lastImageIndex > -1) {
-            const transition = transitionBackgrounds[lastImageIndex];
-            if (transition) {
-                bg_train.push(transition);
-            } else {
-                bg_train.push(currentMainBackground);
-            }
+      const lastImageIndex = backgrounds.indexOf(lastImageInTrain);
+      if (currentBackgroundIndex > lastImageIndex && lastImageIndex > -1) {
+        const transition = transitionBackgrounds[lastImageIndex];
+        if (transition) {
+          bg_train.push(transition);
         } else {
-            bg_train.push(currentMainBackground);
+          bg_train.push(currentMainBackground);
         }
+      } else {
+        bg_train.push(currentMainBackground);
+      }
     }
   }
 }
@@ -643,6 +662,11 @@ function render() {
   } else {
     bgX -= initialSpeed / 4; // Scroll with a fixed speed when not playing
   }
+
+  // Decrement item cooldowns
+  if (weaponCooldown > 0) weaponCooldown--;
+  if (specialWeaponCooldown > 0) specialWeaponCooldown--;
+  if (vomitCooldown > 0) vomitCooldown--;
 
   // On Fire mode timer
   if (onFire) {
@@ -690,7 +714,7 @@ function render() {
     }
     if (onFire) {
       // Continuously spawn on-fire particles around the player
-      createOnFireParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, 2); // Spawn 2 particles per frame
+      createOnFireParticles(cTenth + size[0] / 2, flyHeight + size[1] / 2, 8); // Spawn 8 particles per frame
 
       // Update and draw onFireParticles
       for (let i = onFireParticles.length - 1; i >= 0; i--) {
@@ -752,7 +776,7 @@ function render() {
       }
     }
 
-    
+
 
     // Shots
     for (let i = shots.length - 1; i >= 0; i--) {
@@ -948,8 +972,15 @@ function render() {
     }
 
     // Handle initial boss3 spawn
-    if (currentScore === 180 && !bossMode && !postBossDelayActive && !boss3Defeated) {
+    if (currentScore === 180 && !bossMode && !postBossDelayActive && !boss3AppearedOnce) {
       spawnBoss(3);
+      boss3AppearedOnce = true;
+    }
+
+    // Handle boss3 second apparition
+    if (currentScore === 500 && !bossMode && !postBossDelayActive && boss3Defeated && !boss3AppearedTwice) {
+        spawnBoss(3);
+        boss3AppearedTwice = true;
     }
 
     // Handle boss entry animation
@@ -1055,9 +1086,11 @@ function render() {
     }
 
     // Items
+
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i];
       item.x -= speed;
+
 
       // Apply sine wave for vertical oscillation (fly effect)
       const oscillationAmplitude = 5; // Adjust as needed for desired up/down movement
@@ -1105,11 +1138,15 @@ function render() {
       } else if (item.type === 'specialWeapon') {
         ctx.drawImage(specialWeaponImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
       }
+      else if (item.type === 'vomit') {
+        ctx.drawImage(vomitImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
+      }
       else { // 'beer'
         ctx.drawImage(beerImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight);
       }
 
       if (item.x + item.width < 0) {
+
         items.splice(i, 1);
         continue;
       }
@@ -1139,9 +1176,9 @@ function render() {
             showMessageWithDuration("Max Weapon", "Level!", "gold", 90);
           }
         } else if (item.type === 'specialWeapon') {
-            hasSpecialWeapon = true;
-            specialWeaponTimer = SPECIAL_WEAPON_DURATION;
-            showMessageWithDuration("Special Weapon!", "", "gold", 90);
+          hasSpecialWeapon = true;
+          specialWeaponTimer = SPECIAL_WEAPON_DURATION;
+          showMessageWithDuration("Special Weapon!", "", "gold", 90);
         } else if (item.type === 'vomit') {
           if (weaponLevel > 0) {
             weaponLevel = 0;
@@ -1151,6 +1188,8 @@ function render() {
           beerScore++;
           bestBeerScore = Math.max(bestBeerScore, beerScore);
         }
+
+
         items.splice(i, 1);
       }
     }
@@ -1181,6 +1220,7 @@ function render() {
       // Only add new pipes if not in boss mode and less than 5 pipes have entered (or if boss is defeated)
       if (!bossMode && !postBossDelayActive && !activeBoss && (boss1Defeated || boss2Defeated || boss3Defeated || pipesEntered < 60) && pipe.x <= -pipeWidth) {
         currentScore++;
+        itemSpawnCounter++; // Increment itemSpawnCounter
         pipesEntered++;
         bestScore = Math.max(bestScore, currentScore);
 
@@ -1222,80 +1262,22 @@ function render() {
           spawnBeerItem(beerX, individualBeerY);
         }
 
-        pipes.forEach((pipe, i) => {
-      pipe.x -= displaySpeed;
+        // Probabilistic item spawn every 10 points
+        if (itemSpawnCounter % 10 === 0) { // Use itemSpawnCounter
+          const itemX = newPipe.x + (pipeWidth / 2) - (weaponItemWidth / 2);
+          const itemY = newPipe.y + (pipeGap / 2) - (weaponItemHeight / 2);
+          const rand = Math.random() * 100; // 0-99
 
-      if (pipe.hasTop) {
-        const topPipeHeight = topPipeImg.height * (pipeWidth / topPipeImg.width);
-        ctx.drawImage(topPipeImg, pipe.x, pipe.y - topPipeHeight, pipeWidth, topPipeHeight);
-      }
-
-      const bottomPipeHeight = bottomPipeImg.height * (pipeWidth / bottomPipeImg.width);
-      ctx.drawImage(bottomPipeImg, pipe.x, pipe.y + pipeGap, pipeWidth, bottomPipeHeight);
-
-      // Only add new pipes if not in boss mode and less than 5 pipes have entered (or if boss is defeated)
-      if (!bossMode && !postBossDelayActive && !activeBoss && (boss1Defeated || boss2Defeated || boss3Defeated || pipesEntered < 60) && pipe.x <= -pipeWidth) {
-        currentScore++;
-        pipesEntered++;
-        bestScore = Math.max(bestScore, currentScore);
-
-        const newPipe = {
-          x: pipes[pipes.length - 1].x + pipeGap + pipeWidth,
-          y: pipeLoc(),
-          hasTop: currentScore >= 5
-        };
-        pipes = [...pipes.slice(1), newPipe];
-
-        // Spawn beers horizontally, centered vertically within the pipe gap
-        const numberOfBeers = Math.floor(Math.random() * 2) + 3; // 3 or 4 beers
-        const startX = pipes[pipes.length - 2].x + pipeWidth;
-        const availableHorizontalSpace = (newPipe.x - startX); // This is pipeGap + pipeWidth
-
-        // Calculate the total width of the beers with fixed spacing
-        const totalBeersWidth = (numberOfBeers * itemWidth) + ((numberOfBeers - 1) * fixedHorizontalBeerSpacing);
-
-        // Calculate the starting X to center the group of beers
-        const groupStartX = startX + (availableHorizontalSpace - totalBeersWidth) / 2;
-
-        for (let i = 0; i < numberOfBeers; i++) { // Loop from 0 to numberOfBeers - 1
-          const beerX = groupStartX + (i * (itemWidth + fixedHorizontalBeerSpacing));
-
-          // Calculate individual beerY with vertical variation (up, middle, or down)
-          let individualBeerY = newPipe.y + (pipeGap / 2) - (itemHeight / 2);
-          const randomVerticalPosition = Math.floor(Math.random() * 3); // 0, 1, or 2
-          if (randomVerticalPosition === 0) {
-            individualBeerY -= verticalBeerOffsetAmount; // Up by 24px from center
-          } else if (randomVerticalPosition === 2) {
-            individualBeerY += verticalBeerOffsetAmount; // Down by 24px from center
+          if (rand < 40) { // 40% for weapon
+            spawnWeaponItem(itemX, itemY);
+          } else if (rand < 70) { // 30% for specialWeapon (40 + 30 = 70)
+            spawnSpecialWeaponItem(itemX, itemY);
+          } else if (rand < 90) { // 20% for vomit (70 + 20 = 90)
+            spawnVomitItem(itemX, itemY);
           }
-          // If randomVerticalPosition is 1, individualBeerY remains in the middle
-
-          // Ensure individual beer stays within the pipe gap boundaries (strict clamping)
-          individualBeerY = Math.max(newPipe.y, individualBeerY);
-          individualBeerY = Math.min(newPipe.y + pipeGap - itemHeight, individualBeerY);
-
-          spawnBeerItem(beerX, individualBeerY);
         }
 
-        // Spawn weapon item every 30 points
-        if (currentScore > 0 && currentScore % 30 === 0 && weaponLevel < 3) {
-          const weaponX = newPipe.x + (pipeWidth / 2) - (weaponItemWidth / 2);
-          const weaponY = newPipe.y + (pipeGap / 2) - (weaponItemHeight / 2);
-          spawnWeaponItem(weaponX, weaponY);
-          lastWeaponSpawnScore = currentScore;
-        }
-        // Spawn special weapon item every 20 points
-        else if (currentScore > 0 && currentScore % 20 === 0) {
-            const specialWeaponX = newPipe.x + (pipeWidth / 2) - (weaponItemWidth / 2);
-            const specialWeaponY = newPipe.y + (pipeGap / 2) - (weaponItemHeight / 2);
-            spawnSpecialWeaponItem(specialWeaponX, specialWeaponY);
-        }
-        // Spawn vomit item every 45 points
-        else if (currentScore > 0 && currentScore % 45 === 0) {
-          const vomitX = newPipe.x + (pipeWidth / 2) - (weaponItemWidth / 2);
-          const vomitY = newPipe.y + (pipeGap / 2) - (weaponItemHeight / 2);
-          spawnVomitItem(vomitX, vomitY);
-        }
+        // Speed increase every 20 points
 
         // Speed increase every 20 points
         if (currentScore % 20 === 0 && currentScore !== 60 && currentScore !== 120 && currentScore !== 180) {
@@ -1308,43 +1290,16 @@ function render() {
           enemySpeed += enemySpeedIncreaseAmount;
         }
 
-        // "On Fire" mode every 100 beers
-        if (beerScore > 0 && beerScore % 100 === 0) {
+        if (currentScore > 300 && (currentScore - 300) % 60 === 0) {
+          effectiveEnemyMinInterval = Math.max(10, effectiveEnemyMinInterval - 5);
+        }
+
+        // "On Fire" mode every 10 beers
+        if (beerScore > 0 && beerScore % 10 === 0 && beerScore !== lastOnFireBeerScore) {
           onFire = true;
           onFireTimer = ON_FIRE_DURATION;
           showMessageWithDuration("ON FIRE!", "", "red", 120);
-        }
-      }
-
-      const collisionWithTop = pipe.hasTop && pipe.y > flyHeight;
-      const collisionWithBottom = pipe.y + pipeGap < flyHeight + size[1];
-
-      if ([pipe.x <= cTenth + size[0], pipe.x + pipeWidth >= cTenth, collisionWithTop || collisionWithBottom].every(Boolean)) {
-        if (hasShield) {
-          hasShield = false;
-        } else {
-          gamePlaying = false;
-          setup();
-        }
-      }
-    });
-
-        // Speed increase every 20 points
-        if (currentScore % 20 === 0 && currentScore !== 60 && currentScore !== 120 && currentScore !== 180) {
-          speed += speedIncreaseAmount;
-          showSpeedUpAd = true;
-          speedUpAdTimer = speedUpAdDuration;
-        }
-
-        if (boss3Defeated && currentScore > 180 && (currentScore - 180) % 60 === 0) {
-          enemySpeed += enemySpeedIncreaseAmount;
-        }
-
-        // "On Fire" mode every 100 beers
-        if (beerScore > 0 && beerScore % 100 === 0) {
-          onFire = true;
-          onFireTimer = ON_FIRE_DURATION;
-          showMessageWithDuration("ON FIRE!", "", "red", 120);
+          lastOnFireBeerScore = beerScore;
         }
       }
 
@@ -1555,29 +1510,29 @@ function fireShot() {
 }
 
 function fireSpecialWeapon() {
-    hasSpecialWeapon = false;
-    specialWeaponTimer = 0;
+  hasSpecialWeapon = false;
+  specialWeaponTimer = 0;
 
-    // Fancy flash effect
-    particles.push({
-        x: cTenth + size[0] / 2,
-        y: flyHeight + size[1] / 2,
-        vx: 0,
-        vy: 0,
-        lifespan: 60,
-        size: 10,
-        isFlash: true,
-        maxSize: canvas.width,
-        color: 'white'
-    });
+  // Fancy flash effect
+  particles.push({
+    x: cTenth + size[0] / 2,
+    y: flyHeight + size[1] / 2,
+    vx: 0,
+    vy: 0,
+    lifespan: 60,
+    size: 10,
+    isFlash: true,
+    maxSize: canvas.width,
+    color: 'white'
+  });
 
-    // Destroy all enemies
-    enemies.forEach(enemy => {
-        createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 30);
-        currentKills++;
-        bestKills = Math.max(bestKills, currentKills);
-    });
-    enemies = [];
+  // Destroy all enemies
+  enemies.forEach(enemy => {
+    createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 30);
+    currentKills++;
+    bestKills = Math.max(bestKills, currentKills);
+  });
+  enemies = [];
 }
 
 
@@ -1591,10 +1546,10 @@ canvas.addEventListener("mousedown", () => {
   } else if (gamePlaying && !isPaused) { // If game is already playing and not paused, allow shooting
     isThrusting = true; // Add this line to make the alien jump on click
     if (hasSpecialWeapon) {
-        fireSpecialWeapon();
+      fireSpecialWeapon();
     } else {
-        isShooting = true;
-        fireShot(); // Fire immediately on click
+      isShooting = true;
+      fireShot(); // Fire immediately on click
     }
   }
 });
@@ -1612,10 +1567,10 @@ canvas.addEventListener("touchstart", () => {
   } else if (gamePlaying && !isPaused) { // If game is already playing and not paused, allow shooting
     isThrusting = true; // Add this line to make the alien jump on touch
     if (hasSpecialWeapon) {
-        fireSpecialWeapon();
+      fireSpecialWeapon();
     } else {
-        isShooting = true;
-        fireShot(); // Fire immediately on touch
+      isShooting = true;
+      fireShot(); // Fire immediately on touch
     }
   }
 });

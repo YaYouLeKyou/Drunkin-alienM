@@ -75,9 +75,8 @@ const gameSettings = {
     verticalBeerOffsetAmount: 24,
     weaponItemWidth: 40,
     weaponItemHeight: 40,
-    bombItemWidth: 40,
-    bombItemHeight: 50,
-    SPECIAL_WEAPON_DURATION: 600,
+    bombItemWidth: 30,
+    bombItemHeight: 30,
     ON_FIRE_DURATION: 600,
     speedUpAdDuration: 60
 };
@@ -130,9 +129,6 @@ const gameState = {
     lastAlternatingEnemyType: "enemy1",
     lastEnemyKillPosition: null,
     lastWeaponSpawnScore: 0,
-    hasSpecialWeapon: false,
-    specialWeaponTimer: 0,
-    lastSpecialWeaponSpawnScore: 0,
     showSpeedUpAd: false,
     speedUpAdTimer: 0,
     cTenth: canvas.width / 20,

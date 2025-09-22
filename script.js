@@ -77,9 +77,9 @@ const gameSettings = {
     weaponItemHeight: 50,
     bombItemWidth: 50,
     bombItemHeight: 50,
-    weaponItemHorizontalOffset: 5,
-    bombItemHorizontalOffset: 5,
-    vomitItemHorizontalOffset: 5,
+    weaponItemHorizontalOffset: 0,
+    bombItemHorizontalOffset: 0,
+    vomitItemHorizontalOffset: 0,
     ON_FIRE_DURATION: 600,
     speedUpAdDuration: 60
 };
@@ -244,6 +244,9 @@ function spawnItem(type, x, y) {
         }
     };
     const config = itemConfig[type];
+    if (type === 'bomb' && bombImg.naturalWidth > 0) {
+        config.height = config.width * (bombImg.naturalHeight / bombImg.naturalWidth);
+    }
     const item = {
         x: x,
         y: y,
@@ -1170,7 +1173,10 @@ function draw() {
         }
         for (let i = gameState.items.length - 1; i >= 0; i--) {
             const item = gameState.items[i];
-            const oscillatingY = item.initialY + Math.sin(gameState.index * .05 + item.initialY / 10) * 5;
+            let displayY = item.initialY;
+            if (item.type === "beer" || item.type === "shield") {
+                displayY = item.initialY + Math.sin(gameState.index * .05 + item.initialY / 10) * 5;
+            }
             for (let j = item.itemParticles.length - 1; j >= 0; j--) {
                 const p = item.itemParticles[j];
                 ctx.fillStyle = `${p.color}50`;
@@ -1188,7 +1194,7 @@ function draw() {
             else if (item.type === "vomit") itemImg = vomitImg;
             else if (item.type === "bomb") itemImg = bombImg;
             else itemImg = beerImg;
-            ctx.drawImage(itemImg, item.x + offsetX, oscillatingY + offsetY, scaledWidth, scaledHeight)
+            ctx.drawImage(itemImg, item.x + offsetX, displayY + offsetY, scaledWidth, scaledHeight)
         }
         gameState.pipes.forEach(pipe => {
             if (pipe.hasTop) {

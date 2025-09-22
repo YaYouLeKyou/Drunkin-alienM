@@ -69,14 +69,14 @@ const gameSettings = {
     pipeGap: 270,
     itemWidth: 30,
     itemHeight: 30,
-    shieldWidth: 40,
-    shieldHeight: 40,
+    shieldWidth: 50,
+    shieldHeight: 50,
     fixedHorizontalBeerSpacing: 50,
     verticalBeerOffsetAmount: 24,
-    weaponItemWidth: 40,
-    weaponItemHeight: 40,
-    bombItemWidth: 30,
-    bombItemHeight: 30,
+    weaponItemWidth: 50,
+    weaponItemHeight: 50,
+    bombItemWidth: 50,
+    bombItemHeight: 50,
     ON_FIRE_DURATION: 600,
     speedUpAdDuration: 60
 };
@@ -930,8 +930,8 @@ function update() {
                     spawnBeerItem(beerX, individualBeerY)
                 }
                 if (gameState.currentScore > 0 && gameState.currentScore % 10 === 0) {
-                    const itemX = newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.weaponItemWidth / 2;
-                    const itemY = newPipe.y + gameSettings.pipeGap / 2 - gameSettings.weaponItemHeight / 2;
+                    const itemX = Math.round(newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.weaponItemWidth / 2);
+                    const itemY = Math.round(newPipe.y + gameSettings.pipeGap / 2 - gameSettings.weaponItemHeight / 2);
                     const rand = Math.random();
                     if (rand < 0.33) {
                         spawnWeaponItem(itemX, itemY);

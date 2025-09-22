@@ -77,6 +77,9 @@ const gameSettings = {
     weaponItemHeight: 50,
     bombItemWidth: 50,
     bombItemHeight: 50,
+    weaponItemHorizontalOffset: 5,
+    bombItemHorizontalOffset: 5,
+    vomitItemHorizontalOffset: 5,
     ON_FIRE_DURATION: 600,
     speedUpAdDuration: 60
 };
@@ -108,6 +111,7 @@ const gameState = {
     bestKills: 0,
     bossMode: false,
     bossEntryDelay: 0,
+    postBossBreakTimer: 0,
     pipesEntered: 0,
     postBossDelayActive: false,
     lastWeaponCollectedScore: 0,
@@ -450,6 +454,7 @@ function setup() {
     gameState.speedUpAdTimer = 0;
     gameState.bossMode = false;
     gameState.bossEntryDelay = 0;
+    gameState.postBossBreakTimer = 0;
     gameState.pipesEntered = 0;
     gameState.postBossDelayActive = false;
     gameState.boss1Defeated = false;
@@ -663,7 +668,9 @@ function update() {
                     gameState.activeBoss = null;
                     gameState.bossMode = false;
                     gameState.postBossDelayActive = true;
-                    gameState.bossEntryDelay = 5 * 60;
+                    gameState.postBossBreakTimer = 5 * 60;
+                    gameState.pipes = []; // Clear all pipes
+                    gameState.enemies = []; // Clear all enemies
                     gameState.pipesEntered = 0;
                     showMessageWithDuration("Congratulation!", "", "gold", 120);
                     setTimeout(() => {
@@ -780,8 +787,8 @@ function update() {
             gameState.enemies = gameState.enemies.filter(enemy => enemy.x + enemy.width > 0)
         }
         if (gameState.postBossDelayActive) {
-            if (gameState.bossEntryDelay > 0) {
-                gameState.bossEntryDelay--;
+            if (gameState.postBossBreakTimer > 0) {
+                gameState.postBossBreakTimer--;
                 gameState.pipes = gameState.pipes.filter(pipe => pipe.x + gameSettings.pipeWidth > 0);
                 gameState.enemies = gameState.enemies.filter(enemy => enemy.x + enemy.width > 0)
             } else {
@@ -891,7 +898,7 @@ function update() {
                 gameState.items.splice(i, 1)
             }
         }
-        if (gameState.gamePlaying && gameState.currentScore >= 5 && gameState.pipes.length === 0) {
+        if (gameState.gamePlaying && !gameState.postBossDelayActive && gameState.currentScore >= 5 && gameState.pipes.length === 0) {
             gameState.pipes = Array(3).fill().map((_, i) => ({
                 x: canvas.width + i * (gameSettings.pipeGap + gameSettings.pipeWidth),
                 y: pipeLoc(),
@@ -930,15 +937,17 @@ function update() {
                     spawnBeerItem(beerX, individualBeerY)
                 }
                 if (gameState.currentScore > 0 && gameState.currentScore % 10 === 0) {
-                    const itemX = Math.round(newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.weaponItemWidth / 2);
                     const itemY = Math.round(newPipe.y + gameSettings.pipeGap / 2 - gameSettings.weaponItemHeight / 2);
                     const rand = Math.random();
                     if (rand < 0.33) {
-                        spawnWeaponItem(itemX, itemY);
+                        const weaponItemX = Math.round(newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.weaponItemWidth / 2 + gameSettings.weaponItemHorizontalOffset);
+                        spawnWeaponItem(weaponItemX, itemY);
                     } else if (rand < 0.66) {
-                        spawnVomitItem(itemX, itemY);
+                        const vomitItemX = Math.round(newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.weaponItemWidth / 2 + gameSettings.vomitItemHorizontalOffset);
+                        spawnVomitItem(vomitItemX, itemY);
                     } else {
-                        spawnBombItem(itemX, itemY);
+                        const bombItemX = Math.round(newPipe.x + gameSettings.pipeWidth / 2 - gameSettings.bombItemWidth / 2 + gameSettings.bombItemHorizontalOffset);
+                        spawnBombItem(bombItemX, itemY);
                     }
                 }
                 if (gameState.currentScore % 20 === 0 && gameState.currentScore !== 60 && gameState.currentScore !== 120 && gameState.currentScore !== 180) {
